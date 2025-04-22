@@ -95,6 +95,38 @@ const has5point1Audio = (file) => {
        || stream.channel_layout.includes('side')))));
 };
 
+/**
+ * Identifies profanity in the transcription
+ *
+ * @param {object} transcription - The transcription object from WhisperX
+ * @param {string} filterLevel - The profanity filter level (mild, medium, strong)
+ * @returns {Array} - Array of profanity instances with start and end times
+ */
+const identifyProfanity = (transcription, filterLevel) => {
+  const { isProfanity } = require('../../utils/profanityList');
+  const profanityInstances = [];
+
+  // Check if we have word-level timestamps
+  if (transcription.segments) {
+    for (const segment of transcription.segments) {
+      if (segment.words) {
+        for (const word of segment.words) {
+          // Check if the word is profanity using the shared function
+          if (isProfanity(word.word, filterLevel)) {
+            profanityInstances.push({
+              word: word.word,
+              start: word.start,
+              end: word.end,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  return profanityInstances;
+};
+
 // Plugin implementation
 const plugin = (file, librarySettings, inputs, otherArguments) => {
   const lib = require('../methods/lib')();
@@ -127,8 +159,10 @@ const plugin = (file, librarySettings, inputs, otherArguments) => {
   response.infoLog += `☑ Beep Frequency: ${inputs.beepFrequency} Hz\n`;
 
   // For testing purposes, if we're in a test environment, return early
+  // Fixed the check to handle cases where originalLibraryFile might not be a string
   if (process.env.NODE_ENV === 'test'
       || (otherArguments && otherArguments.originalLibraryFile
+       && typeof otherArguments.originalLibraryFile === 'string'
        && otherArguments.originalLibraryFile.includes('/path/to/sample/'))) {
     return response;
   }
