@@ -2,6 +2,16 @@
 const _ = require('lodash');
 const run = require('../helpers/run');
 
+// Mock the profanityList module
+jest.mock('../../utils/profanityList', () => ({
+  isProfanity: jest.fn().mockReturnValue(false),
+  profanityList: {
+    mild: ['damn', 'hell'],
+    medium: ['damn', 'hell', 'shit'],
+    strong: ['damn', 'hell', 'shit', 'fuck'],
+  },
+}));
+
 const tests = [
   {
     input: {
