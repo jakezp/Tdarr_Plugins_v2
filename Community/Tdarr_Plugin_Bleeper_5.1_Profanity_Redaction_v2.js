@@ -100,6 +100,60 @@ const details = () => ({
 });
 
 /**
+ * Profanity list categorized by severity level
+ * Based on the filter_list.txt from the Bleeper project
+ */
+const profanityList = {
+  mild: [
+    'damn', 'hell', 'ass', 'piss', 'poop', 'butt'
+  ],
+  medium: [
+    'damn', 'hell', 'ass', 'piss', 'poop', 'butt',
+    'shit', 'bitch', 'bastard', 'dick', 'prick', 'crap',
+    'dumbass', 'bullshit', 'asshole', 'dumbshit', 'dumbfuck',
+    'tit', 'tits', 'titty', 'titties', 'boob', 'boobs', 'boobies'
+  ],
+  strong: [
+    // Include all words from mild and medium
+    'damn', 'hell', 'ass', 'piss', 'poop', 'butt',
+    'shit', 'bitch', 'bastard', 'dick', 'prick', 'crap',
+    'dumbass', 'bullshit', 'asshole', 'dumbshit', 'dumbfuck',
+    'tit', 'tits', 'titty', 'titties', 'boob', 'boobs', 'boobies',
+    // Additional strong profanity
+    'fuck', 'fucking', 'fucked', 'fucker', 'fuckers', 'fuckin', 'fucks',
+    'motherfuck', 'motherfucker', 'motherfuckers', 'motherfucking',
+    'cunt', 'cock', 'pussy', 'twat', 'nigger', 'nigga', 'faggot', 'fag',
+    'anal', 'anus', 'arse', 'arsehole', 'blowjob', 'blow job', 'boner',
+    'clusterfuck', 'cum', 'cumming', 'cumshot', 'dildo', 'fingerbang',
+    'fisting', 'gangbang', 'gang bang', 'whore', 'slut', 'wank',
+    'Christ', 'God', 'Jesus', 'Goddamn', 'God damn'
+  ]
+};
+
+/**
+ * Function to check if a word matches any profanity in the list
+ * Uses case-insensitive matching
+ * 
+ * @param {string} word - The word to check
+ * @param {string} level - The profanity filter level (mild, medium, strong)
+ * @returns {boolean} - True if the word is profanity, false otherwise
+ */
+function isProfanity(word, level = 'medium') {
+  if (!word) return false;
+  
+  // Default to medium if invalid level is provided
+  const filterLevel = profanityList[level] ? level : 'medium';
+  
+  // Convert word to lowercase for case-insensitive matching
+  const lowerWord = word.toLowerCase().trim();
+  
+  // Check if the word is in the profanity list for the specified level
+  return profanityList[filterLevel].some(badWord => 
+    lowerWord === badWord || lowerWord.includes(badWord)
+  );
+}
+
+/**
  * Helper function for consistent logging
  * 
  * @param {string} message - The message to log
@@ -465,9 +519,6 @@ const plugin = async (file, librarySettings, inputs, otherArguments) => {
   const lib = require('../methods/lib')();
   // eslint-disable-next-line no-param-reassign
   inputs = lib.loadDefaultValues(inputs, details);
-  
-  // Import the profanity list module
-  const { profanityList, isProfanity } = require('profanityList');
   
   const response = {
     processFile: false,
