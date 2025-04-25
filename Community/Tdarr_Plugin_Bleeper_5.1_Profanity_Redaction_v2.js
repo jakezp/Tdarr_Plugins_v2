@@ -232,20 +232,11 @@ async function extractAudioStream(inputFile, outputDir, audioStream) {
       
       console.log(`Extracting audio stream from ${inputFile} to ${audioOutputFile}`);
       
-      // Extract audio stream using FFmpeg
-      // Using array format to avoid shell escaping issues
-      const cmd = [
-        'ffmpeg',
-        '-y',
-        '-i', inputFile,
-        '-map', `0:${audioStream.index}`,
-        '-c:a', 'copy',
-        '-strict', '-2',
-        audioOutputFile
-      ];
+      // Use a direct command string instead of array to avoid shell escaping issues
+      const cmd = `ffmpeg -y -i "${inputFile}" -map 0:${audioStream.index} -c:a copy -strict -2 "${audioOutputFile}"`;
       
-      console.log(`Executing command: ${cmd.join(' ')}`);
-      execSync(cmd.join(' '));
+      console.log(`Executing command: ${cmd}`);
+      execSync(cmd);
       
       resolve(audioOutputFile);
     } catch (error) {
@@ -286,47 +277,10 @@ async function extractCenterChannel(audioFile, outputDir, audioStream) {
       
       console.log(`Extracting center channel from ${audioFile} to ${centerChannelFile}`);
       
-      // Extract center channel using FFmpeg
-      // Using array format to avoid shell escaping issues
-      // Fixed filter_complex syntax by properly quoting it
-      const cmdArray = [
-        'ffmpeg',
-        '-y',
-        '-i', audioFile,
-        '-filter_complex', '"[0:a]pan=mono:c0=FC[center]"',
-        '-map', '"[center]"'
-      ];
-      
-      // Add codec parameters based on the output format
-      if (codecName === 'dts') {
-        cmdArray.push('-c:a', 'pcm_s32le');
-      } else if (codecName !== 'ac3') {
-        cmdArray.push('-c:a', 'ac3');
-      }
-      
-      // Add bitrate if available in the audio stream
-      // This preserves the original audio quality
-      if (audioStream.bit_rate) {
-        cmdArray.push('-b:a', audioStream.bit_rate);
-      }
-      
-      // Add sample rate if available in the audio stream
-      // This preserves the original audio quality
-      if (audioStream.sample_rate) {
-        cmdArray.push('-ar', audioStream.sample_rate);
-      }
-      
-      // Add output file
-      cmdArray.push('-strict', '-2', centerChannelFile);
-      
-      // Join the array into a command string
-      const cmd = cmdArray.join(' ');
-      console.log(`Executing command: ${cmd}`);
-      
-      // Try a different approach for the filter_complex
+      // Use a direct command string with proper quoting
       // This is a simpler command that should work more reliably
       const simpleCmd = `ffmpeg -y -i "${audioFile}" -af "pan=mono:c0=FC" -c:a ac3 "${centerChannelFile}"`;
-      console.log(`Trying simpler command: ${simpleCmd}`);
+      console.log(`Executing command: ${simpleCmd}`);
       execSync(simpleCmd);
       
       resolve(centerChannelFile);
@@ -437,7 +391,7 @@ const plugin = async (file, librarySettings, inputs, otherArguments) => {
   inputs = lib.loadDefaultValues(inputs, details);
   
   // Import the profanity list module
-  const { profanityList, isProfanity } = require('/app/utils/profanityList');
+  const { profanityList, isProfanity } = require('../utils/profanityList');
   
   const response = {
     processFile: false,
