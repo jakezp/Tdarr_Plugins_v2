@@ -416,7 +416,7 @@ const plugin = async (file, librarySettings, inputs, otherArguments) => {
   inputs = lib.loadDefaultValues(inputs, details);
   
   // Import the profanity list module
-  const { profanityList, isProfanity } = require('../utils/profanityList');
+  const { profanityList, isProfanity } = require('/app/utils/profanityList');
   
   const response = {
     processFile: false,
