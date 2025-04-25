@@ -224,28 +224,26 @@ const plugin = async (file, librarySettings, inputs, otherArguments) => {
     // For Phase 1 and 2, we'll implement a simple approach that just applies a high-pass filter
     // to the center channel to simulate bleeping out profanity
     
-    // Create a simple FFmpeg command that:
-    // 1. Splits the 5.1 audio into individual channels
-    // 2. Applies a high-pass filter to the center channel (FC) to simulate bleeping
-    // 3. Recombines all channels back into 5.1 audio
-    // 4. Keeps the original audio if requested
-    
+    // Create FFmpeg command following the structure provided by the user
     let ffmpegCommand = '';
     
-    // Filter complex to split channels, filter center channel, and recombine
-    ffmpegCommand += '-filter_complex "[0:a]channelsplit=channel_layout=5.1[FL][FC][FR][BL][BR][LFE];';
-    ffmpegCommand += `[FC]highpass=f=${inputs.beepFrequency}[FCFiltered];`;
-    ffmpegCommand += '[FL][FCFiltered][FR][BL][BR][LFE]join=inputs=6:channel_layout=5.1[a]" ';
+    // Add input first
+    ffmpegCommand += `-i "${file.file}" `;
     
-    // Map video stream and processed audio
+    // Add filter complex
+    ffmpegCommand += `-filter_complex "[0:a]channelsplit=channel_layout=5.1[FL][FC][FR][BL][BR][LFE];`;
+    ffmpegCommand += `[FC]highpass=f=${inputs.beepFrequency}[FCFiltered];`;
+    ffmpegCommand += `[FL][FCFiltered][FR][BL][BR][LFE]join=inputs=6:channel_layout=5.1[a]" `;
+    
+    // Map video and processed audio
     ffmpegCommand += '-map 0:v -map "[a]" ';
     
-    // Keep original audio if requested
+    // Optionally keep original audio
     if (keepOriginalAudio) {
       ffmpegCommand += '-map 0:a ';
     }
     
-    // Set disposition (default stream)
+    // Set disposition
     ffmpegCommand += '-disposition:a:0 default ';
     if (keepOriginalAudio) {
       ffmpegCommand += '-disposition:a:1 0 ';
@@ -257,7 +255,7 @@ const plugin = async (file, librarySettings, inputs, otherArguments) => {
       ffmpegCommand += '-c:a:1 copy ';
     }
     
-    // Add metadata
+    // Metadata
     ffmpegCommand += '-metadata:s:a:0 title="EN - Family" ';
     if (keepOriginalAudio) {
       ffmpegCommand += '-metadata:s:a:1 title="EN - Original" ';
