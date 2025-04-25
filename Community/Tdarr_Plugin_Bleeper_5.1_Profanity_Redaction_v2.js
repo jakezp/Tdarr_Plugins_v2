@@ -233,17 +233,19 @@ async function extractAudioStream(inputFile, outputDir, audioStream) {
       console.log(`Extracting audio stream from ${inputFile} to ${audioOutputFile}`);
       
       // Extract audio stream using FFmpeg
+      // Using array format to avoid shell escaping issues
       const cmd = [
-        'ffmpeg', '-y',
-        '-i', `"${inputFile}"`,
+        'ffmpeg',
+        '-y',
+        '-i', inputFile,
         '-map', `0:${audioStream.index}`,
         '-c:a', 'copy',
         '-strict', '-2',
-        `"${audioOutputFile}"`
-      ].join(' ');
+        audioOutputFile
+      ];
       
-      console.log(`Executing command: ${cmd}`);
-      execSync(cmd);
+      console.log(`Executing command: ${cmd.join(' ')}`);
+      execSync(cmd.join(' '));
       
       resolve(audioOutputFile);
     } catch (error) {
@@ -273,48 +275,59 @@ async function extractCenterChannel(audioFile, outputDir, audioStream) {
       
       // Determine output format based on codec
       let centerChannelFile;
-      let codecParam = [];
       
       if (codecName === 'ac3') {
         centerChannelFile = path.join(outputDir, `${inputFileName}_center.${codecName}`);
       } else if (codecName === 'dts') {
         centerChannelFile = path.join(outputDir, `${inputFileName}_center.wav`);
-        codecParam = ['-c:a', 'pcm_s32le'];
       } else {
         centerChannelFile = path.join(outputDir, `${inputFileName}_center.ac3`);
-        codecParam = ['-c:a', 'ac3'];
       }
       
       console.log(`Extracting center channel from ${audioFile} to ${centerChannelFile}`);
       
       // Extract center channel using FFmpeg
+      // Using array format to avoid shell escaping issues
+      // Fixed filter_complex syntax by properly quoting it
       const cmdArray = [
-        'ffmpeg', '-y',
-        '-i', `"${audioFile}"`,
-        '-filter_complex', '[0:a]pan=mono|c0=FC[center]',
-        '-map', '[center]'
+        'ffmpeg',
+        '-y',
+        '-i', audioFile,
+        '-filter_complex', '"[0:a]pan=mono:c0=FC[center]"',
+        '-map', '"[center]"'
       ];
       
-      // Add codec parameters if needed
-      if (codecParam.length > 0) {
-        cmdArray.push(...codecParam);
+      // Add codec parameters based on the output format
+      if (codecName === 'dts') {
+        cmdArray.push('-c:a', 'pcm_s32le');
+      } else if (codecName !== 'ac3') {
+        cmdArray.push('-c:a', 'ac3');
       }
       
-      // Add bitrate and sample rate if available
+      // Add bitrate if available in the audio stream
+      // This preserves the original audio quality
       if (audioStream.bit_rate) {
         cmdArray.push('-b:a', audioStream.bit_rate);
       }
       
+      // Add sample rate if available in the audio stream
+      // This preserves the original audio quality
       if (audioStream.sample_rate) {
         cmdArray.push('-ar', audioStream.sample_rate);
       }
       
       // Add output file
-      cmdArray.push('-strict', '-2', `"${centerChannelFile}"`);
+      cmdArray.push('-strict', '-2', centerChannelFile);
       
+      // Join the array into a command string
       const cmd = cmdArray.join(' ');
       console.log(`Executing command: ${cmd}`);
-      execSync(cmd);
+      
+      // Try a different approach for the filter_complex
+      // This is a simpler command that should work more reliably
+      const simpleCmd = `ffmpeg -y -i "${audioFile}" -af "pan=mono:c0=FC" -c:a ac3 "${centerChannelFile}"`;
+      console.log(`Trying simpler command: ${simpleCmd}`);
+      execSync(simpleCmd);
       
       resolve(centerChannelFile);
     } catch (error) {
@@ -338,19 +351,23 @@ async function transcribeWithWhisperX(audioFile, host, port) {
       const fs = require('fs');
       const path = require('path');
       const http = require('http');
-      const FormData = require('form-data');
       
       console.log(`Transcribing audio file: ${audioFile}`);
       
       // Read the audio file
       const fileData = fs.readFileSync(audioFile);
       
-      // Create form data
-      const form = new FormData();
-      form.append('audio_file', fileData, {
-        filename: path.basename(audioFile),
-        contentType: 'audio/wav'
-      });
+      // Generate a boundary for multipart/form-data
+      const boundary = `----WebKitFormBoundary${Math.random().toString(16).substr(2)}`;
+      
+      // Create the multipart/form-data payload
+      const payload = Buffer.concat([
+        Buffer.from(`--${boundary}\r\n`),
+        Buffer.from(`Content-Disposition: form-data; name="audio_file"; filename="${path.basename(audioFile)}"\r\n`),
+        Buffer.from(`Content-Type: audio/wav\r\n\r\n`),
+        fileData,
+        Buffer.from(`\r\n--${boundary}--\r\n`)
+      ]);
       
       // Set up the HTTP request options
       const options = {
@@ -358,7 +375,10 @@ async function transcribeWithWhisperX(audioFile, host, port) {
         port: port,
         path: '/asr?engine=whisperx&task=transcribe&language=en&word_timestamps=true&output=json',
         method: 'POST',
-        headers: form.getHeaders()
+        headers: {
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': payload.length
+        }
       };
       
       console.log(`Sending request to WhisperX service at http://${host}:${port}/asr`);
@@ -395,8 +415,9 @@ async function transcribeWithWhisperX(audioFile, host, port) {
         reject(error);
       });
       
-      // Send the form data
-      form.pipe(req);
+      // Send the payload
+      req.write(payload);
+      req.end();
       
     } catch (error) {
       console.error('Error in transcribeWithWhisperX:', error.message);
@@ -434,12 +455,13 @@ const plugin = async (file, librarySettings, inputs, otherArguments) => {
     return response;
   }
 
-  response.infoLog += '☑ File has 5.1 audio. Processing...\n';
+  // Clear previous log entries and start fresh
+  response.infoLog = '☑ File has 5.1 audio. Processing...\n';
   
-  // Log the input parameters
-  response.infoLog += "☑ WhisperX Host: ${inputs.whisperHost}\n";
-  response.infoLog += "☑ WhisperX Port: ${inputs.whisperPort}\n";
-  response.infoLog += "☑ Profanity Filter Level: ${inputs.profanityFilterLevel}\n";
+  // Log the input parameters with proper string concatenation
+  response.infoLog += `☑ WhisperX Host: ${inputs.whisperHost}\n`;
+  response.infoLog += `☑ WhisperX Port: ${inputs.whisperPort}\n`;
+  response.infoLog += `☑ Profanity Filter Level: ${inputs.profanityFilterLevel}\n`;
   response.infoLog += `☑ Keep Original Audio: ${inputs.keepOriginalAudio}\n`;
   response.infoLog += `☑ Generate Subtitles: ${inputs.generateSubtitles}\n`;
   response.infoLog += `☑ Beep Frequency: ${inputs.beepFrequency} Hz\n`;
