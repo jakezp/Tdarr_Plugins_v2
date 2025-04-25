@@ -25,7 +25,7 @@ const profanityList = {
     'raghead', 'towelhead', 'paki', 'dago', 'mick', 'kraut',
     'jap', 'dyke', 'lesbo', 'homo', 'fudgepacker', 'queef',
     'skank', 'minge', 'poon', 'poonani', 'punani', 'snatch',
-    'twunt', 'cuntface', 'dickwad', 'dickface', 'dickweed',
+    'twunt', 'kak', 'cuntface', 'dickwad', 'dickface', 'dickweed',
     'fuckface', 'fuckwit', 'fucktard', 'shitface', 'shitbag',
     'douchebag', 'douche', 'cuntrag', 'dickrag', 'fuckrag',
     'fuckboy', 'fuckboi', 'cumbubble', 'cumguzzler', 'cumslut',
