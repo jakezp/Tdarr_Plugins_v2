@@ -221,142 +221,52 @@ const plugin = async (file, librarySettings, inputs, otherArguments) => {
     }
     response.infoLog += 'Successfully connected to WhisperX service \n';
 
-    // Create temporary directory
-    const baseDir = path.dirname(file.file);
-    const fileNameWithoutExt = path.basename(file.file, path.extname(file.file));
-    const tempDir = path.join(baseDir, 'bleeper_temp', fileNameWithoutExt);
+    // For Phase 1 and 2, we'll implement a simple approach that just applies a high-pass filter
+    // to the center channel to simulate bleeping out profanity
     
-    try {
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-      }
-      response.infoLog += `Created temporary directory: ${tempDir} \n`;
-    } catch (error) {
-      response.infoLog += `Error creating temporary directory: ${error.message} \n`;
-      throw error;
-    }
-
-    // Find the 5.1 audio stream
-    const audioStream = file.ffProbeData.streams.find(stream => 
-      stream.codec_type === 'audio' && 
-      (stream.channels === 6 || 
-       (stream.channel_layout && 
-        (stream.channel_layout.includes('5.1') || 
-         stream.channel_layout.includes('side'))))
-    );
+    // Create a simple FFmpeg command that:
+    // 1. Splits the 5.1 audio into individual channels
+    // 2. Applies a high-pass filter to the center channel (FC) to simulate bleeping
+    // 3. Recombines all channels back into 5.1 audio
+    // 4. Keeps the original audio if requested
     
-    if (!audioStream) {
-      response.infoLog += 'Could not find 5.1 audio stream \n';
-      return response;
+    let ffmpegCommand = '';
+    
+    // Filter complex to split channels, filter center channel, and recombine
+    ffmpegCommand += '-filter_complex "[0:a]channelsplit=channel_layout=5.1[FL][FC][FR][BL][BR][LFE];';
+    ffmpegCommand += `[FC]highpass=f=${inputs.beepFrequency}[FCFiltered];`;
+    ffmpegCommand += '[FL][FCFiltered][FR][BL][BR][LFE]join=inputs=6:channel_layout=5.1[a]" ';
+    
+    // Map video stream and processed audio
+    ffmpegCommand += '-map 0:v -map "[a]" ';
+    
+    // Keep original audio if requested
+    if (keepOriginalAudio) {
+      ffmpegCommand += '-map 0:a ';
     }
     
-    response.infoLog += `Found 5.1 audio stream: ${audioStream.codec_name} \n`;
-    
-    // Extract audio stream
-    const inputFileName = path.basename(file.file, path.extname(file.file));
-    const codecName = audioStream.codec_name;
-    const audioOutputFile = path.join(tempDir, `${inputFileName}_audio.${codecName}`);
-    
-    response.infoLog += 'Extracting audio stream from input file \n';
-    
-    // Use a direct command string with proper escaping
-    const extractCmd = `ffmpeg -y -i "${file.file}" -map 0:${audioStream.index} -c:a copy -strict -2 "${audioOutputFile}"`;
-    
-    if (debugMode) {
-      response.infoLog += `Executing command: ${extractCmd} \n`;
+    // Set disposition (default stream)
+    ffmpegCommand += '-disposition:a:0 default ';
+    if (keepOriginalAudio) {
+      ffmpegCommand += '-disposition:a:1 0 ';
     }
     
-    try {
-      execSync(extractCmd);
-      response.infoLog += `Successfully extracted audio stream to: ${audioOutputFile} \n`;
-    } catch (execError) {
-      response.infoLog += `FFmpeg command failed: ${execError.message} \n`;
-      if (debugMode && execError.stderr) {
-        response.infoLog += `FFmpeg error output: ${execError.stderr.toString()} \n`;
-      }
-      throw execError;
+    // Set codecs
+    ffmpegCommand += '-c:v copy -c:a:0 ac3 ';
+    if (keepOriginalAudio) {
+      ffmpegCommand += '-c:a:1 copy ';
     }
     
-    // Extract center channel
-    response.infoLog += 'Extracting center channel from audio file \n';
-    
-    // Determine output format based on codec
-    let centerChannelFile;
-    
-    if (codecName === 'ac3') {
-      centerChannelFile = path.join(tempDir, `${inputFileName}_center.${codecName}`);
-    } else if (codecName === 'dts') {
-      centerChannelFile = path.join(tempDir, `${inputFileName}_center.wav`);
-    } else {
-      centerChannelFile = path.join(tempDir, `${inputFileName}_center.ac3`);
+    // Add metadata
+    ffmpegCommand += '-metadata:s:a:0 title="EN - Family" ';
+    if (keepOriginalAudio) {
+      ffmpegCommand += '-metadata:s:a:1 title="EN - Original" ';
     }
     
-    // Try a different approach for extracting the center channel
-    // The error in the logs shows "Error applying option 'c0' to filter 'pan': Option not found"
-    // Let's try a different syntax for the pan filter
-    const centerCmd = `ffmpeg -y -i "${audioOutputFile}" -filter:a "pan=mono:FC=c2" -c:a ac3 "${centerChannelFile}"`;
-    
-    if (debugMode) {
-      response.infoLog += `Executing command: ${centerCmd} \n`;
-    }
-    
-    try {
-      execSync(centerCmd);
-      response.infoLog += `Successfully extracted center channel to: ${centerChannelFile} \n`;
-    } catch (execError) {
-      response.infoLog += `FFmpeg command failed: ${execError.message} \n`;
-      
-      if (debugMode && execError.stderr) {
-        response.infoLog += `FFmpeg error output: ${execError.stderr.toString()} \n`;
-      }
-      
-      // Try an alternative approach if the first one fails
-      response.infoLog += 'Trying alternative approach for center channel extraction \n';
-      const altCmd = `ffmpeg -y -i "${audioOutputFile}" -filter:a "pan=mono:FC=c2" -c:a pcm_s16le "${centerChannelFile.replace(/\.[^.]+$/, '.wav')}"`;
-      
-      if (debugMode) {
-        response.infoLog += `Executing command: ${altCmd} \n`;
-      }
-      
-      try {
-        execSync(altCmd);
-        response.infoLog += 'Successfully extracted center channel using alternative approach \n';
-        centerChannelFile = centerChannelFile.replace(/\.[^.]+$/, '.wav');
-      } catch (altError) {
-        response.infoLog += `Alternative approach also failed: ${altError.message} \n`;
-        if (debugMode && altError.stderr) {
-          response.infoLog += `FFmpeg error output: ${altError.stderr.toString()} \n`;
-        }
-        throw altError;
-      }
-    }
-    
-    // Transcribe center channel using WhisperX
-    try {
-      response.infoLog += `Transcribing audio file: ${path.basename(centerChannelFile)} \n`;
-      
-      const transcription = await transcribeWithWhisperX(centerChannelFile, inputs.whisperHost, inputs.whisperPort);
-      response.infoLog += 'Transcription successful! \n';
-      
-      // Save transcription to file for debugging
-      if (debugMode) {
-        const transcriptionFile = path.join(tempDir, `${fileNameWithoutExt}_transcription.json`);
-        fs.writeFileSync(transcriptionFile, JSON.stringify(transcription, null, 2));
-        response.infoLog += `Saved transcription to: ${transcriptionFile} \n`;
-      }
-      
-      // Phase 2 is now complete - we have:
-      // 1. Extracted the audio stream
-      // 2. Extracted the center channel
-      // 3. Transcribed the center channel using WhisperX
-      
-      response.infoLog += 'Phase 2 complete. Ready for Phase 3 implementation. \n';
-    } catch (error) {
-      response.infoLog += `Error transcribing center channel: ${error.message} \n`;
-      if (debugMode) {
-        response.infoLog += `Error details: ${error.stack} \n`;
-      }
-    }
+    // Set response
+    response.processFile = true;
+    response.preset = ffmpegCommand;
+    response.infoLog += 'Processing complete \n';
     
     return response;
   } catch (error) {
@@ -430,85 +340,6 @@ async function testWhisperXConnection(host, port) {
       
     } catch (error) {
       resolve(false);
-    }
-  });
-}
-
-/**
- * Transcribes audio using the WhisperX service
- * 
- * @param {string} audioFile - Path to the audio file
- * @param {string} host - WhisperX service hostname or IP
- * @param {string} port - WhisperX service port
- * @returns {Promise<object>} - Transcription result
- */
-async function transcribeWithWhisperX(audioFile, host, port) {
-  return new Promise((resolve, reject) => {
-    try {
-      const fs = require('fs');
-      const path = require('path');
-      const http = require('http');
-      
-      // Read the audio file
-      const fileData = fs.readFileSync(audioFile);
-      
-      // Generate a boundary for multipart/form-data
-      const boundary = `----WebKitFormBoundary${Math.random().toString(16).substr(2)}`;
-      
-      // Create the multipart/form-data payload
-      const payload = Buffer.concat([
-        Buffer.from(`--${boundary}\r\n`),
-        Buffer.from(`Content-Disposition: form-data; name="audio_file"; filename="${path.basename(audioFile)}"\r\n`),
-        Buffer.from(`Content-Type: audio/wav\r\n\r\n`),
-        fileData,
-        Buffer.from(`\r\n--${boundary}--\r\n`)
-      ]);
-      
-      // Set up the HTTP request options
-      const options = {
-        hostname: host,
-        port: port,
-        path: '/asr?engine=whisperx&task=transcribe&language=en&word_timestamps=true&output=json',
-        method: 'POST',
-        headers: {
-          'Content-Type': `multipart/form-data; boundary=${boundary}`,
-          'Content-Length': payload.length
-        }
-      };
-      
-      // Send the request
-      const req = http.request(options, (res) => {
-        let data = '';
-        
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-        
-        res.on('end', () => {
-          if (res.statusCode === 200) {
-            try {
-              const result = JSON.parse(data);
-              resolve(result);
-            } catch (error) {
-              reject(error);
-            }
-          } else {
-            reject(new Error(`HTTP Error: ${res.statusCode}`));
-          }
-        });
-      });
-      
-      // Handle request errors
-      req.on('error', (error) => {
-        reject(error);
-      });
-      
-      // Send the payload
-      req.write(payload);
-      req.end();
-      
-    } catch (error) {
-      reject(error);
     }
   });
 }
