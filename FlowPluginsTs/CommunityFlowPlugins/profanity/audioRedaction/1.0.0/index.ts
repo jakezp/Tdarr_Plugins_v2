@@ -152,41 +152,30 @@ function createFFmpegFilter(
   bleepFrequency: number,
   bleepVolume: number,
 ): string {
-  // Create condition for when to mute the original audio (during profanity)
-  const dippedVocalsConditions = profanitySegments
-    .map(segment => `between(t,${segment.start},${segment.end})`)
-    .join('+');
+  // Use a simpler approach with fewer segments
+  // Create a volume filter for each profanity segment
+  const volumeFilters = profanitySegments.map((segment, i) => {
+    return `[0:a]volume=0:enable='between(t,${segment.start},${segment.end})'[s${i}];`;
+  }).join('');
   
-  const dippedVocalsFilter = `[0]volume=0:enable='${dippedVocalsConditions}'[main]`;
+  // Create a sine wave for the beep
+  const sineFilter = `aevalsrc=0.8*sin(2*PI*${bleepFrequency}*t):d=${duration}:s=48000[beep];`;
   
-  // Create condition for when to mute the bleep (during non-profanity)
-  let noBleepsConditions = '';
-  
-  if (nonProfanityIntervals.length > 0) {
-    noBleepsConditions = nonProfanityIntervals
-      .slice(0, -1)
-      .map(interval => `between(t,${interval.start},${interval.end})`)
-      .join('+');
+  // Create a chain of overlays
+  let overlayChain = '';
+  if (profanitySegments.length > 0) {
+    // First overlay
+    overlayChain += `[0:a][beep]amix=inputs=2:duration=first[out];`;
     
-    const lastInterval = nonProfanityIntervals[nonProfanityIntervals.length - 1];
-    if (lastInterval.end === duration) {
-      noBleepsConditions += noBleepsConditions ? `+gte(t,${lastInterval.start})` : `gte(t,${lastInterval.start})`;
-    } else {
-      noBleepsConditions += noBleepsConditions ? 
-        `+between(t,${lastInterval.start},${lastInterval.end})` : 
-        `between(t,${lastInterval.start},${lastInterval.end})`;
+    // Apply volume filters for each profanity segment
+    for (let i = 0; i < profanitySegments.length; i++) {
+      const segment = profanitySegments[i];
+      overlayChain += `[out]volume=enable='between(t,${segment.start},${segment.end})':volume=${bleepVolume}[out];`;
     }
   }
   
-  const dippedBleepFilter = `sine=f=${bleepFrequency},volume=${bleepVolume},aformat=channel_layouts=mono+stereo,volume=0:enable='${noBleepsConditions}'[beep]`;
-  
-  const amixFilter = "[main][beep]amix=inputs=2:duration=first";
-  
-  const filterComplex = [
-    dippedVocalsFilter,
-    dippedBleepFilter,
-    amixFilter,
-  ].join(';');
+  // Final filter complex
+  const filterComplex = volumeFilters + sineFilter + overlayChain;
   
   return filterComplex;
 }
@@ -289,6 +278,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const ffmpegArgs = [
       '-i', audioFilePath,
       '-filter_complex', filterComplex,
+      '-map', '[out]',
       '-c:a', 'pcm_s16le', // Use PCM for best quality
       outputFilePath,
     ];

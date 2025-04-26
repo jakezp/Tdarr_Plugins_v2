@@ -197,35 +197,26 @@ function getNonProfanityIntervals(profanitySegments, duration) {
  * @returns FFmpeg filter complex string
  */
 function createFFmpegFilter(profanitySegments, nonProfanityIntervals, duration, bleepFrequency, bleepVolume) {
-    // Create condition for when to mute the original audio (during profanity)
-    var dippedVocalsConditions = profanitySegments
-        .map(function (segment) { return "between(t,".concat(segment.start, ",").concat(segment.end, ")"); })
-        .join('+');
-    var dippedVocalsFilter = "[0]volume=0:enable='".concat(dippedVocalsConditions, "'[main]");
-    // Create condition for when to mute the bleep (during non-profanity)
-    var noBleepsConditions = '';
-    if (nonProfanityIntervals.length > 0) {
-        noBleepsConditions = nonProfanityIntervals
-            .slice(0, -1)
-            .map(function (interval) { return "between(t,".concat(interval.start, ",").concat(interval.end, ")"); })
-            .join('+');
-        var lastInterval = nonProfanityIntervals[nonProfanityIntervals.length - 1];
-        if (lastInterval.end === duration) {
-            noBleepsConditions += noBleepsConditions ? "+gte(t,".concat(lastInterval.start, ")") : "gte(t,".concat(lastInterval.start, ")");
-        }
-        else {
-            noBleepsConditions += noBleepsConditions ?
-                "+between(t,".concat(lastInterval.start, ",").concat(lastInterval.end, ")") :
-                "between(t,".concat(lastInterval.start, ",").concat(lastInterval.end, ")");
+    // Use a simpler approach with fewer segments
+    // Create a volume filter for each profanity segment
+    var volumeFilters = profanitySegments.map(function (segment, i) {
+        return "[0:a]volume=0:enable='between(t,".concat(segment.start, ",").concat(segment.end, ")'[s").concat(i, "];");
+    }).join('');
+    // Create a sine wave for the beep
+    var sineFilter = "aevalsrc=0.8*sin(2*PI*".concat(bleepFrequency, "*t):d=").concat(duration, ":s=48000[beep];");
+    // Create a chain of overlays
+    var overlayChain = '';
+    if (profanitySegments.length > 0) {
+        // First overlay
+        overlayChain += "[0:a][beep]amix=inputs=2:duration=first[out];";
+        // Apply volume filters for each profanity segment
+        for (var i = 0; i < profanitySegments.length; i++) {
+            var segment = profanitySegments[i];
+            overlayChain += "[out]volume=enable='between(t,".concat(segment.start, ",").concat(segment.end, ")':volume=").concat(bleepVolume, "[out];");
         }
     }
-    var dippedBleepFilter = "sine=f=".concat(bleepFrequency, ",volume=").concat(bleepVolume, ",aformat=channel_layouts=mono+stereo,volume=0:enable='").concat(noBleepsConditions, "'[beep]");
-    var amixFilter = "[main][beep]amix=inputs=2:duration=first";
-    var filterComplex = [
-        dippedVocalsFilter,
-        dippedBleepFilter,
-        amixFilter,
-    ].join(';');
+    // Final filter complex
+    var filterComplex = volumeFilters + sineFilter + overlayChain;
     return filterComplex;
 }
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -308,6 +299,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 ffmpegArgs = [
                     '-i', audioFilePath,
                     '-filter_complex', filterComplex,
+                    '-map', '[out]',
                     '-c:a', 'pcm_s16le',
                     outputFilePath,
                 ];
