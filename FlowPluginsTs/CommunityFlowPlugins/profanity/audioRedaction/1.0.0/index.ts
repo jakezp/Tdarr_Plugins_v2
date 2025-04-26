@@ -300,7 +300,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     // Create a temporary script file with the FFmpeg command
     const scriptDir = path.dirname(audioFilePath);
     const scriptPath = `${scriptDir}/ffmpeg_redact_${Date.now()}.sh`;
-    const ffmpegCmd = `${args.ffmpegPath} -i "${audioFilePath}" -filter_complex "${filterComplex}" -c:a pcm_s16le "${outputFilePath}"`;
+    const ffmpegCmd = `${args.ffmpegPath} -i "${audioFilePath}" -filter_complex "${filterComplex}" -c:a ac3 "${outputFilePath}"`;
     
     // Write the script file
     const fs = require('fs');
@@ -355,7 +355,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     
     // Create a temporary script file with the FFmpeg normalization command
     const normScriptPath = `${scriptDir}/ffmpeg_normalize_${Date.now()}.sh`;
-    const normCmd = `${args.ffmpegPath} -i "${outputFilePath}" -bitexact -ac 1 -strict -2 -af "loudnorm=I=-24:LRA=7:TP=-2:measured_I=${loudnessInfo}:linear=true:print_format=summary,volume=0.90" -c:a pcm_s16le "${normalizedOutputPath}"`;
+    const normCmd = `${args.ffmpegPath} -i "${outputFilePath}" -bitexact -ac 1 -strict -2 -af "loudnorm=I=-24:LRA=7:TP=-2:measured_I=${loudnessInfo}:linear=true:print_format=summary,volume=0.90" -c:a ac3 "${normalizedOutputPath}"`;
     
     // Write the script file
     fs.writeFileSync(normScriptPath, normCmd);

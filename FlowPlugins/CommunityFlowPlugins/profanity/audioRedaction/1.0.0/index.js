@@ -316,7 +316,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 outputFilePath = "".concat(audioDir, "/").concat(fileName, "_redacted").concat(fileExt);
                 scriptDir = path.dirname(audioFilePath);
                 scriptPath = "".concat(scriptDir, "/ffmpeg_redact_").concat(Date.now(), ".sh");
-                ffmpegCmd = "".concat(args.ffmpegPath, " -i \"").concat(audioFilePath, "\" -filter_complex \"").concat(filterComplex, "\" -c:a pcm_s16le \"").concat(outputFilePath, "\"");
+                ffmpegCmd = "".concat(args.ffmpegPath, " -i \"").concat(audioFilePath, "\" -filter_complex \"").concat(filterComplex, "\" -c:a ac3 \"").concat(outputFilePath, "\"");
                 fs = require('fs');
                 fs.writeFileSync(scriptPath, ffmpegCmd);
                 fs.chmodSync(scriptPath, '755'); // Make it executable
@@ -355,7 +355,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 normalizedFileName = "".concat(fileName, "_redacted_normalized").concat(fileExt);
                 normalizedOutputPath = "".concat(audioDir, "/").concat(normalizedFileName);
                 normScriptPath = "".concat(scriptDir, "/ffmpeg_normalize_").concat(Date.now(), ".sh");
-                normCmd = "".concat(args.ffmpegPath, " -i \"").concat(outputFilePath, "\" -bitexact -ac 1 -strict -2 -af \"loudnorm=I=-24:LRA=7:TP=-2:measured_I=").concat(loudnessInfo, ":linear=true:print_format=summary,volume=0.90\" -c:a pcm_s16le \"").concat(normalizedOutputPath, "\"");
+                normCmd = "".concat(args.ffmpegPath, " -i \"").concat(outputFilePath, "\" -bitexact -ac 1 -strict -2 -af \"loudnorm=I=-24:LRA=7:TP=-2:measured_I=").concat(loudnessInfo, ":linear=true:print_format=summary,volume=0.90\" -c:a ac3 \"").concat(normalizedOutputPath, "\"");
                 // Write the script file
                 fs.writeFileSync(normScriptPath, normCmd);
                 fs.chmodSync(normScriptPath, '755'); // Make it executable

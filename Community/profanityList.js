@@ -56,13 +56,26 @@ function isProfanity(word, level = 'medium') {
   // Default to medium if invalid level is provided
   const filterLevel = profanityList[level] ? level : 'medium';
   
-  // Convert word to lowercase and remove any punctuation for case-insensitive matching
-  const wordWithoutPunct = word.toLowerCase().replace(/[.,!?;:'"()\-\s]+/g, '');
+  // Convert word to lowercase for case-insensitive matching
+  const lowerWord = word.toLowerCase();
   
-  // Simple case-insensitive exact match, following Bleeper's implementation
-  return profanityList[filterLevel].some(badWord =>
-    wordWithoutPunct === badWord.toLowerCase().replace(/[.,!?;:'"()\-\s]+/g, '')
-  );
+  // Handle contractions and possessives specially to avoid false positives
+  // For example, "he'll" should not match "hell", "she's" should not match "ass"
+  if (lowerWord.includes("'")) {
+    // For contractions, we need to be more careful
+    // Don't remove apostrophes for matching
+    return profanityList[filterLevel].some(badWord =>
+      lowerWord === badWord.toLowerCase()
+    );
+  } else {
+    // For regular words, remove punctuation
+    const wordWithoutPunct = lowerWord.replace(/[.,!?;:'"()\-\s]+/g, '');
+    
+    // Simple case-insensitive exact match, following Bleeper's implementation
+    return profanityList[filterLevel].some(badWord =>
+      wordWithoutPunct === badWord.toLowerCase().replace(/[.,!?;:'"()\-\s]+/g, '')
+    );
+  }
 }
 
 module.exports = {
