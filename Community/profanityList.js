@@ -56,12 +56,12 @@ function isProfanity(word, level = 'medium') {
   // Default to medium if invalid level is provided
   const filterLevel = profanityList[level] ? level : 'medium';
   
-  // Convert word to lowercase for case-insensitive matching
-  const lowerWord = word.toLowerCase().trim();
+  // Convert word to lowercase and remove any punctuation for case-insensitive matching
+  const wordWithoutPunct = word.toLowerCase().replace(/[.,!?;:'"()\-\s]+/g, '');
   
-  // Check if the word is in the profanity list for the specified level
-  return profanityList[filterLevel].some(badWord => 
-    lowerWord === badWord || lowerWord.includes(badWord)
+  // Simple case-insensitive exact match, following Bleeper's implementation
+  return profanityList[filterLevel].some(badWord =>
+    wordWithoutPunct === badWord.toLowerCase().replace(/[.,!?;:'"()\-\s]+/g, '')
   );
 }
 
