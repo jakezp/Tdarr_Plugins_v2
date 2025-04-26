@@ -173,7 +173,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         variables: args.variables,
                     }];
             }
-            profanityModule = require('../../../../FlowPlugins/CommunityFlowPlugins/profanity/profanityList');
+            profanityModule = require('../../profanityList');
             isProfanity = profanityModule.isProfanity;
             profanitySegments = [];
             segments = transcriptionData.segments;

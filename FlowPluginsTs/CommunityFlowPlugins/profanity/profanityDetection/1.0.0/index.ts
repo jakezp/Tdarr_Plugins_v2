@@ -143,7 +143,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     }
 
     // Import the profanity list
-    const profanityModule = require('../../../../FlowPlugins/CommunityFlowPlugins/profanity/profanityList');
+    const profanityModule = require('../../profanityList');
     const { isProfanity } = profanityModule;
 
     // Process each segment to find profanity
