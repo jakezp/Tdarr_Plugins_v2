@@ -34,13 +34,13 @@ const details = (): IpluginDetails => ({
       label: 'Output Format',
       name: 'outputFormat',
       type: 'string',
-      defaultValue: 'wav',
+      defaultValue: 'ac3',
       inputUI: {
         type: 'dropdown',
         options: [
+          'ac3',
           'wav',
           'mp3',
-          'ac3',
           'aac',
         ],
       },
@@ -106,10 +106,11 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       };
     }
 
-    // Create output file path in the plugin work directory
-    const workDir = getPluginWorkDir(args);
+    // Use the same temp folder that the whole workflow is working in
+    // Extract the directory from the input audio path
+    const audioDir = audioFilePath.substring(0, audioFilePath.lastIndexOf('/'));
     const fileName = getFileName(audioFilePath);
-    const outputFilePath = `${workDir}/${fileName}_center.${outputFormat}`;
+    const outputFilePath = `${audioDir}/${fileName}_center.${outputFormat}`;
 
     args.jobLog(`Extracting center channel from 5.1 audio: ${audioFilePath}`);
     args.jobLog(`Output format: ${outputFormat}`);

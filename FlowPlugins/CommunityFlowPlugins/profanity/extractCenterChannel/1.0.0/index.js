@@ -78,13 +78,13 @@ var details = function () { return ({
             label: 'Output Format',
             name: 'outputFormat',
             type: 'string',
-            defaultValue: 'wav',
+            defaultValue: 'ac3',
             inputUI: {
                 type: 'dropdown',
                 options: [
+                    'ac3',
                     'wav',
                     'mp3',
-                    'ac3',
                     'aac',
                 ],
             },
@@ -109,7 +109,7 @@ var details = function () { return ({
 exports.details = details;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, audioFilePath, outputFormat, channelCount, workDir, fileName, outputFilePath, ffmpegArgs, cli, res, error_1, errorMessage;
+    var lib, audioFilePath, outputFormat, channelCount, audioDir, fileName, outputFilePath, ffmpegArgs, cli, res, error_1, errorMessage;
     var _a, _b, _c, _d;
     return __generator(this, function (_e) {
         switch (_e.label) {
@@ -150,9 +150,9 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                             variables: args.variables,
                         }];
                 }
-                workDir = (0, fileUtils_1.getPluginWorkDir)(args);
+                audioDir = audioFilePath.substring(0, audioFilePath.lastIndexOf('/'));
                 fileName = (0, fileUtils_1.getFileName)(audioFilePath);
-                outputFilePath = "".concat(workDir, "/").concat(fileName, "_center.").concat(outputFormat);
+                outputFilePath = "".concat(audioDir, "/").concat(fileName, "_center.").concat(outputFormat);
                 args.jobLog("Extracting center channel from 5.1 audio: ".concat(audioFilePath));
                 args.jobLog("Output format: ".concat(outputFormat));
                 args.jobLog("Output file: ".concat(outputFilePath));
