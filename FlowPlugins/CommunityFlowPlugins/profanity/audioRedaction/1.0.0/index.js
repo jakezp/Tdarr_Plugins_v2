@@ -230,7 +230,7 @@ function createFFmpegFilter(profanitySegments, nonProfanityIntervals, duration, 
 }
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, audioFilePath, bleepFrequency, bleepVolume, extraBufferTime_1, profanitySegments, duration, lastSegment, nonProfanityIntervals, filterComplex, audioDir, fileName, fileExt, outputFilePath, ffmpegArgs, cli, res, loudnessInfo, normalizedFileName, normalizedOutputPath, normalizationArgs, normCli, normRes, error_1, errorMessage;
+    var lib, audioFilePath, bleepFrequency, bleepVolume, extraBufferTime_1, profanitySegments, duration, lastSegment, nonProfanityIntervals, filterComplex, audioDir, fileName, fileExt, outputFilePath, scriptDir, scriptPath, ffmpegCmd, fs, ffmpegArgs, cli, res, loudnessInfo, normalizedFileName, normalizedOutputPath, normScriptPath, normCmd, normalizationArgs, normCli, normRes, error_1, errorMessage;
     var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
     return __generator(this, function (_l) {
         switch (_l.label) {
@@ -314,15 +314,20 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 fileName = (0, fileUtils_1.getFileName)(audioFilePath);
                 fileExt = path.extname(audioFilePath);
                 outputFilePath = "".concat(audioDir, "/").concat(fileName, "_redacted").concat(fileExt);
+                scriptDir = path.dirname(audioFilePath);
+                scriptPath = "".concat(scriptDir, "/ffmpeg_redact_").concat(Date.now(), ".sh");
+                ffmpegCmd = "".concat(args.ffmpegPath, " -i \"").concat(audioFilePath, "\" -filter_complex \"").concat(filterComplex, "\" -c:a pcm_s16le \"").concat(outputFilePath, "\"");
+                fs = require('fs');
+                fs.writeFileSync(scriptPath, ffmpegCmd);
+                fs.chmodSync(scriptPath, '755'); // Make it executable
+                args.jobLog("Created FFmpeg script: ".concat(scriptPath));
+                args.jobLog("FFmpeg command: ".concat(ffmpegCmd));
                 ffmpegArgs = [
-                    '-i', audioFilePath,
-                    '-filter_complex', filterComplex,
-                    '-c:a', 'pcm_s16le',
-                    outputFilePath,
+                    scriptPath
                 ];
                 args.jobLog("Executing FFmpeg command to redact audio");
                 cli = new cliUtils_1.CLI({
-                    cli: args.ffmpegPath,
+                    cli: '/bin/sh',
                     spawnArgs: ffmpegArgs,
                     spawnOpts: {},
                     jobLog: args.jobLog,
@@ -349,18 +354,19 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 loudnessInfo = ((_k = (_j = args.variables) === null || _j === void 0 ? void 0 : _j.user) === null || _k === void 0 ? void 0 : _k.loudnessInfo) || '-24';
                 normalizedFileName = "".concat(fileName, "_redacted_normalized").concat(fileExt);
                 normalizedOutputPath = "".concat(audioDir, "/").concat(normalizedFileName);
+                normScriptPath = "".concat(scriptDir, "/ffmpeg_normalize_").concat(Date.now(), ".sh");
+                normCmd = "".concat(args.ffmpegPath, " -i \"").concat(outputFilePath, "\" -bitexact -ac 1 -strict -2 -af \"loudnorm=I=-24:LRA=7:TP=-2:measured_I=").concat(loudnessInfo, ":linear=true:print_format=summary,volume=0.90\" -c:a pcm_s16le \"").concat(normalizedOutputPath, "\"");
+                // Write the script file
+                fs.writeFileSync(normScriptPath, normCmd);
+                fs.chmodSync(normScriptPath, '755'); // Make it executable
+                args.jobLog("Created FFmpeg normalization script: ".concat(normScriptPath));
+                args.jobLog("FFmpeg normalization command: ".concat(normCmd));
                 normalizationArgs = [
-                    '-i', outputFilePath,
-                    '-bitexact', '-ac', '1',
-                    '-strict', '-2',
-                    '-af',
-                    "loudnorm=I=-24:LRA=7:TP=-2:measured_I=".concat(loudnessInfo, ":linear=true:print_format=summary,volume=0.90"),
-                    '-c:a', 'pcm_s16le',
-                    normalizedOutputPath,
+                    normScriptPath
                 ];
                 args.jobLog("Executing FFmpeg command to normalize audio");
                 normCli = new cliUtils_1.CLI({
-                    cli: args.ffmpegPath,
+                    cli: '/bin/sh',
                     spawnArgs: normalizationArgs,
                     spawnOpts: {},
                     jobLog: args.jobLog,
@@ -373,6 +379,14 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 return [4 /*yield*/, normCli.runCli()];
             case 3:
                 normRes = _l.sent();
+                // Clean up the script files
+                try {
+                    fs.unlinkSync(scriptPath);
+                    fs.unlinkSync(normScriptPath);
+                }
+                catch (err) {
+                    args.jobLog("Warning: Could not delete temporary script files: ".concat(err));
+                }
                 if (normRes.cliExitCode !== 0) {
                     args.jobLog('FFmpeg audio normalization failed');
                     // Continue with the unnormalized audio

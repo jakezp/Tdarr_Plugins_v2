@@ -293,18 +293,33 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const outputFilePath = `${audioDir}/${fileName}_redacted${fileExt}`;
 
     // Build FFmpeg command to apply the filter
+    // Note: We need to wrap the filter_complex in quotes to handle the square brackets properly
+    // However, the CLI class will handle the arguments differently depending on the platform
+    // So we'll use a different approach to ensure the filter complex is properly quoted
+    
+    // Create a temporary script file with the FFmpeg command
+    const scriptDir = path.dirname(audioFilePath);
+    const scriptPath = `${scriptDir}/ffmpeg_redact_${Date.now()}.sh`;
+    const ffmpegCmd = `${args.ffmpegPath} -i "${audioFilePath}" -filter_complex "${filterComplex}" -c:a pcm_s16le "${outputFilePath}"`;
+    
+    // Write the script file
+    const fs = require('fs');
+    fs.writeFileSync(scriptPath, ffmpegCmd);
+    fs.chmodSync(scriptPath, '755'); // Make it executable
+    
+    args.jobLog(`Created FFmpeg script: ${scriptPath}`);
+    args.jobLog(`FFmpeg command: ${ffmpegCmd}`);
+    
+    // Execute the script
     const ffmpegArgs = [
-      '-i', audioFilePath,
-      '-filter_complex', filterComplex,
-      '-c:a', 'pcm_s16le', // Use PCM for best quality
-      outputFilePath,
+      scriptPath
     ];
 
     args.jobLog(`Executing FFmpeg command to redact audio`);
 
     // Execute FFmpeg command
     const cli = new CLI({
-      cli: args.ffmpegPath,
+      cli: '/bin/sh',
       spawnArgs: ffmpegArgs,
       spawnOpts: {},
       jobLog: args.jobLog,
@@ -338,21 +353,27 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const normalizedFileName = `${fileName}_redacted_normalized${fileExt}`;
     const normalizedOutputPath = `${audioDir}/${normalizedFileName}`;
     
-    // Build FFmpeg command for normalization
+    // Create a temporary script file with the FFmpeg normalization command
+    const normScriptPath = `${scriptDir}/ffmpeg_normalize_${Date.now()}.sh`;
+    const normCmd = `${args.ffmpegPath} -i "${outputFilePath}" -bitexact -ac 1 -strict -2 -af "loudnorm=I=-24:LRA=7:TP=-2:measured_I=${loudnessInfo}:linear=true:print_format=summary,volume=0.90" -c:a pcm_s16le "${normalizedOutputPath}"`;
+    
+    // Write the script file
+    fs.writeFileSync(normScriptPath, normCmd);
+    fs.chmodSync(normScriptPath, '755'); // Make it executable
+    
+    args.jobLog(`Created FFmpeg normalization script: ${normScriptPath}`);
+    args.jobLog(`FFmpeg normalization command: ${normCmd}`);
+    
+    // Execute the script
     const normalizationArgs = [
-      '-i', outputFilePath,
-      '-bitexact', '-ac', '1',
-      '-strict', '-2',
-      '-af', `loudnorm=I=-24:LRA=7:TP=-2:measured_I=${loudnessInfo}:linear=true:print_format=summary,volume=0.90`,
-      '-c:a', 'pcm_s16le',
-      normalizedOutputPath,
+      normScriptPath
     ];
     
     args.jobLog(`Executing FFmpeg command to normalize audio`);
     
     // Execute FFmpeg command for normalization
     const normCli = new CLI({
-      cli: args.ffmpegPath,
+      cli: '/bin/sh',
       spawnArgs: normalizationArgs,
       spawnOpts: {},
       jobLog: args.jobLog,
@@ -364,6 +385,14 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     });
     
     const normRes = await normCli.runCli();
+    
+    // Clean up the script files
+    try {
+      fs.unlinkSync(scriptPath);
+      fs.unlinkSync(normScriptPath);
+    } catch (err) {
+      args.jobLog(`Warning: Could not delete temporary script files: ${err}`);
+    }
     
     if (normRes.cliExitCode !== 0) {
       args.jobLog('FFmpeg audio normalization failed');
