@@ -141,7 +141,7 @@ var details = function () { return ({
 exports.details = details;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, filterLevel, bufferTime, saveJson, transcriptionData, audioFilePath, profanityModule, isProfanity, profanitySegments, segments, i, segment, j, wordObj, word, start, end, audioDir, fileName, jsonFilePath, errorMessage;
+    var lib, filterLevel, bufferTime, saveJson, transcriptionData, audioFilePath, profanityModule, isProfanity, profanitySegments, segments, i, segment, j, wordObj, word, cleanWord, start, end, audioDir, fileName, jsonFilePath, errorMessage;
     var _a, _b;
     return __generator(this, function (_c) {
         lib = require('../../../../../methods/lib')();
@@ -192,8 +192,8 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     if (!word || word.match(/^[.,!?;:'"()\-\s]+$/)) {
                         continue;
                     }
-                    // Check if the word is profanity
-                    if (isProfanity(word, filterLevel)) {
+                    cleanWord = word.replace(/[.,!?;:'"()\-\s]+/g, '');
+                    if (isProfanity(cleanWord, filterLevel)) {
                         start = Math.max(0, wordObj.start - bufferTime);
                         end = wordObj.end + bufferTime;
                         profanitySegments.push({
@@ -202,7 +202,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                             end: end,
                             segmentId: segment.id,
                         });
-                        args.jobLog("Detected profanity: \"".concat(word, "\" at ").concat(start.toFixed(2), "s - ").concat(end.toFixed(2), "s"));
+                        args.jobLog("Detected profanity: \"".concat(word, "\" (cleaned: \"").concat(cleanWord, "\") at ").concat(start.toFixed(2), "s - ").concat(end.toFixed(2), "s"));
                     }
                 }
             }

@@ -171,7 +171,9 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         }
 
         // Check if the word is profanity
-        if (isProfanity(word, filterLevel)) {
+        // Clean the word of any punctuation that might be attached to it
+        const cleanWord = word.replace(/[.,!?;:'"()\-\s]+/g, '');
+        if (isProfanity(cleanWord, filterLevel)) {
           // Add buffer time to start and end
           const start = Math.max(0, wordObj.start - bufferTime);
           const end = wordObj.end + bufferTime;
@@ -183,7 +185,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
             segmentId: segment.id,
           });
           
-          args.jobLog(`Detected profanity: "${word}" at ${start.toFixed(2)}s - ${end.toFixed(2)}s`);
+          args.jobLog(`Detected profanity: "${word}" (cleaned: "${cleanWord}") at ${start.toFixed(2)}s - ${end.toFixed(2)}s`);
         }
       }
     }
