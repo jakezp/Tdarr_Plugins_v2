@@ -197,42 +197,51 @@ function getNonProfanityIntervals(profanitySegments, duration) {
  * @returns FFmpeg filter complex string
  */
 function createFFmpegFilter(profanitySegments, nonProfanityIntervals, duration, bleepFrequency, bleepVolume) {
-    // Use a simpler approach with fewer segments
-    // Create a volume filter for each profanity segment
-    var volumeFilters = profanitySegments.map(function (segment, i) {
-        return "[0:a]volume=0:enable='between(t,".concat(segment.start, ",").concat(segment.end, ")'[s").concat(i, "];");
-    }).join('');
-    // Create a sine wave for the beep
-    var sineFilter = "aevalsrc=0.8*sin(2*PI*".concat(bleepFrequency, "*t):d=").concat(duration, ":s=48000[beep];");
-    // Create a chain of overlays
-    var overlayChain = '';
-    if (profanitySegments.length > 0) {
-        // First overlay
-        overlayChain += "[0:a][beep]amix=inputs=2:duration=first[out];";
-        // Apply volume filters for each profanity segment
-        for (var i = 0; i < profanitySegments.length; i++) {
-            var segment = profanitySegments[i];
-            overlayChain += "[out]volume=enable='between(t,".concat(segment.start, ",").concat(segment.end, ")':volume=").concat(bleepVolume, "[out];");
+    // Create condition for when to mute the original audio (during profanity)
+    var dippedVocalsConditions = profanitySegments
+        .map(function (segment) { return "between(t,".concat(segment.start, ",").concat(segment.end, ")"); })
+        .join('+');
+    var dippedVocalsFilter = "[0]volume=0:enable='".concat(dippedVocalsConditions, "'[main]");
+    // Create condition for when to mute the bleep (during non-profanity)
+    var noBleepsConditions = '';
+    if (nonProfanityIntervals.length > 0) {
+        noBleepsConditions = nonProfanityIntervals
+            .slice(0, -1)
+            .map(function (interval) { return "between(t,".concat(interval.start, ",").concat(interval.end, ")"); })
+            .join('+');
+        var lastInterval = nonProfanityIntervals[nonProfanityIntervals.length - 1];
+        if (lastInterval.end === duration) {
+            noBleepsConditions += noBleepsConditions ? "+gte(t,".concat(lastInterval.start, ")") : "gte(t,".concat(lastInterval.start, ")");
+        }
+        else {
+            noBleepsConditions += noBleepsConditions ?
+                "+between(t,".concat(lastInterval.start, ",").concat(lastInterval.end, ")") :
+                "between(t,".concat(lastInterval.start, ",").concat(lastInterval.end, ")");
         }
     }
-    // Final filter complex
-    var filterComplex = volumeFilters + sineFilter + overlayChain;
+    var dippedBleepFilter = "sine=f=".concat(bleepFrequency, ",volume=").concat(bleepVolume, ",aformat=channel_layouts=mono,volume=0:enable='").concat(noBleepsConditions, "'[beep]");
+    var amixFilter = "[main][beep]amix=inputs=2:duration=first";
+    var filterComplex = [
+        dippedVocalsFilter,
+        dippedBleepFilter,
+        amixFilter,
+    ].join(';');
     return filterComplex;
 }
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, audioFilePath, bleepFrequency, bleepVolume, extraBufferTime_1, profanitySegments, duration, nonProfanityIntervals, filterComplex, audioDir, fileName, fileExt, outputFilePath, ffmpegArgs, cli, res, error_1, errorMessage;
-    var _a, _b, _c, _d, _e, _f, _g, _h;
-    return __generator(this, function (_j) {
-        switch (_j.label) {
+    var lib, audioFilePath, bleepFrequency, bleepVolume, extraBufferTime_1, profanitySegments, duration, lastSegment, nonProfanityIntervals, filterComplex, audioDir, fileName, fileExt, outputFilePath, ffmpegArgs, cli, res, loudnessInfo, normalizedFileName, normalizedOutputPath, normalizationArgs, normCli, normRes, error_1, errorMessage;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+    return __generator(this, function (_l) {
+        switch (_l.label) {
             case 0:
                 lib = require('../../../../../methods/lib')();
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
                 args.inputs = lib.loadDefaultValues(args.inputs, details);
                 args.jobLog('Starting audio redaction for profanity');
-                _j.label = 1;
+                _l.label = 1;
             case 1:
-                _j.trys.push([1, 3, , 4]);
+                _l.trys.push([1, 4, , 5]);
                 audioFilePath = args.inputs.audioFilePath;
                 bleepFrequency = parseInt(args.inputs.bleepFrequency, 10);
                 bleepVolume = parseFloat(args.inputs.bleepVolume);
@@ -287,8 +296,17 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         segment.end += extraBufferTime_1;
                     });
                 }
-                duration = 86400;
-                args.jobLog("Audio duration: ".concat(duration, " seconds"));
+                duration = 0;
+                if (profanitySegments.length > 0) {
+                    lastSegment = profanitySegments.reduce(function (latest, segment) {
+                        return segment.end > latest.end ? segment : latest;
+                    }, profanitySegments[0]);
+                    duration = lastSegment.end + 60; // Add 60 seconds buffer
+                }
+                else {
+                    duration = 3600; // Default to 1 hour if no segments
+                }
+                args.jobLog("Using audio duration: ".concat(duration, " seconds"));
                 nonProfanityIntervals = getNonProfanityIntervals(profanitySegments, duration);
                 filterComplex = createFFmpegFilter(profanitySegments, nonProfanityIntervals, duration, bleepFrequency, bleepVolume);
                 args.jobLog("Created FFmpeg filter complex: ".concat(filterComplex));
@@ -299,7 +317,6 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 ffmpegArgs = [
                     '-i', audioFilePath,
                     '-filter_complex', filterComplex,
-                    '-map', '[out]',
                     '-c:a', 'pcm_s16le',
                     outputFilePath,
                 ];
@@ -317,7 +334,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 });
                 return [4 /*yield*/, cli.runCli()];
             case 2:
-                res = _j.sent();
+                res = _l.sent();
                 if (res.cliExitCode !== 0) {
                     args.jobLog('FFmpeg audio redaction failed');
                     return [2 /*return*/, {
@@ -327,17 +344,59 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         }];
                 }
                 args.jobLog("Audio redaction successful: ".concat(outputFilePath));
+                // Now normalize the redacted audio
+                args.jobLog('Normalizing redacted audio');
+                loudnessInfo = ((_k = (_j = args.variables) === null || _j === void 0 ? void 0 : _j.user) === null || _k === void 0 ? void 0 : _k.loudnessInfo) || '-24';
+                normalizedFileName = "".concat(fileName, "_redacted_normalized").concat(fileExt);
+                normalizedOutputPath = "".concat(audioDir, "/").concat(normalizedFileName);
+                normalizationArgs = [
+                    '-i', outputFilePath,
+                    '-bitexact', '-ac', '1',
+                    '-strict', '-2',
+                    '-af',
+                    "loudnorm=I=-24:LRA=7:TP=-2:measured_I=".concat(loudnessInfo, ":linear=true:print_format=summary,volume=0.90"),
+                    '-c:a', 'pcm_s16le',
+                    normalizedOutputPath,
+                ];
+                args.jobLog("Executing FFmpeg command to normalize audio");
+                normCli = new cliUtils_1.CLI({
+                    cli: args.ffmpegPath,
+                    spawnArgs: normalizationArgs,
+                    spawnOpts: {},
+                    jobLog: args.jobLog,
+                    outputFilePath: normalizedOutputPath,
+                    inputFileObj: args.inputFileObj,
+                    logFullCliOutput: args.logFullCliOutput,
+                    updateWorker: args.updateWorker,
+                    args: args,
+                });
+                return [4 /*yield*/, normCli.runCli()];
+            case 3:
+                normRes = _l.sent();
+                if (normRes.cliExitCode !== 0) {
+                    args.jobLog('FFmpeg audio normalization failed');
+                    // Continue with the unnormalized audio
+                    args.variables = __assign(__assign({}, args.variables), { user: __assign(__assign({}, args.variables.user), { redactedAudioPath: outputFilePath }) });
+                    return [2 /*return*/, {
+                            outputFileObj: {
+                                _id: outputFilePath,
+                            },
+                            outputNumber: 1,
+                            variables: args.variables,
+                        }];
+                }
+                args.jobLog("Audio normalization successful: ".concat(normalizedOutputPath));
                 // Update variables for downstream plugins
-                args.variables = __assign(__assign({}, args.variables), { user: __assign(__assign({}, args.variables.user), { redactedAudioPath: outputFilePath }) });
+                args.variables = __assign(__assign({}, args.variables), { user: __assign(__assign({}, args.variables.user), { redactedAudioPath: normalizedOutputPath, unnormalizedRedactedAudioPath: outputFilePath }) });
                 return [2 /*return*/, {
                         outputFileObj: {
-                            _id: outputFilePath,
+                            _id: normalizedOutputPath,
                         },
                         outputNumber: 1,
                         variables: args.variables,
                     }];
-            case 3:
-                error_1 = _j.sent();
+            case 4:
+                error_1 = _l.sent();
                 errorMessage = error_1 instanceof Error ? error_1.message : 'Unknown error';
                 args.jobLog("Error in audio redaction: ".concat(errorMessage));
                 return [2 /*return*/, {
@@ -345,7 +404,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         outputNumber: 2,
                         variables: args.variables,
                     }];
-            case 4: return [2 /*return*/];
+            case 5: return [2 /*return*/];
         }
     });
 }); };

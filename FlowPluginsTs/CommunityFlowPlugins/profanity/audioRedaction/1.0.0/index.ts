@@ -152,30 +152,41 @@ function createFFmpegFilter(
   bleepFrequency: number,
   bleepVolume: number,
 ): string {
-  // Use a simpler approach with fewer segments
-  // Create a volume filter for each profanity segment
-  const volumeFilters = profanitySegments.map((segment, i) => {
-    return `[0:a]volume=0:enable='between(t,${segment.start},${segment.end})'[s${i}];`;
-  }).join('');
+  // Create condition for when to mute the original audio (during profanity)
+  const dippedVocalsConditions = profanitySegments
+    .map(segment => `between(t,${segment.start},${segment.end})`)
+    .join('+');
   
-  // Create a sine wave for the beep
-  const sineFilter = `aevalsrc=0.8*sin(2*PI*${bleepFrequency}*t):d=${duration}:s=48000[beep];`;
+  const dippedVocalsFilter = `[0]volume=0:enable='${dippedVocalsConditions}'[main]`;
   
-  // Create a chain of overlays
-  let overlayChain = '';
-  if (profanitySegments.length > 0) {
-    // First overlay
-    overlayChain += `[0:a][beep]amix=inputs=2:duration=first[out];`;
+  // Create condition for when to mute the bleep (during non-profanity)
+  let noBleepsConditions = '';
+  
+  if (nonProfanityIntervals.length > 0) {
+    noBleepsConditions = nonProfanityIntervals
+      .slice(0, -1)
+      .map(interval => `between(t,${interval.start},${interval.end})`)
+      .join('+');
     
-    // Apply volume filters for each profanity segment
-    for (let i = 0; i < profanitySegments.length; i++) {
-      const segment = profanitySegments[i];
-      overlayChain += `[out]volume=enable='between(t,${segment.start},${segment.end})':volume=${bleepVolume}[out];`;
+    const lastInterval = nonProfanityIntervals[nonProfanityIntervals.length - 1];
+    if (lastInterval.end === duration) {
+      noBleepsConditions += noBleepsConditions ? `+gte(t,${lastInterval.start})` : `gte(t,${lastInterval.start})`;
+    } else {
+      noBleepsConditions += noBleepsConditions ? 
+        `+between(t,${lastInterval.start},${lastInterval.end})` : 
+        `between(t,${lastInterval.start},${lastInterval.end})`;
     }
   }
   
-  // Final filter complex
-  const filterComplex = volumeFilters + sineFilter + overlayChain;
+  const dippedBleepFilter = `sine=f=${bleepFrequency},volume=${bleepVolume},aformat=channel_layouts=mono,volume=0:enable='${noBleepsConditions}'[beep]`;
+  
+  const amixFilter = "[main][beep]amix=inputs=2:duration=first";
+  
+  const filterComplex = [
+    dippedVocalsFilter,
+    dippedBleepFilter,
+    amixFilter,
+  ].join(';');
   
   return filterComplex;
 }
@@ -249,10 +260,17 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       });
     }
 
-    // Use a large duration value as fallback
-    // This ensures that the filter will work even if we can't determine the exact duration
-    const duration = 86400; // 24 hours in seconds
-    args.jobLog(`Audio duration: ${duration} seconds`);
+    // Try to get a reasonable duration estimate
+    // We'll use the end time of the last profanity segment plus some buffer
+    let duration = 0;
+    if (profanitySegments.length > 0) {
+      const lastSegment = profanitySegments.reduce((latest, segment) => 
+        segment.end > latest.end ? segment : latest, profanitySegments[0]);
+      duration = lastSegment.end + 60; // Add 60 seconds buffer
+    } else {
+      duration = 3600; // Default to 1 hour if no segments
+    }
+    args.jobLog(`Using audio duration: ${duration} seconds`);
 
     // Get non-profanity intervals
     const nonProfanityIntervals = getNonProfanityIntervals(profanitySegments, duration);
@@ -278,7 +296,6 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const ffmpegArgs = [
       '-i', audioFilePath,
       '-filter_complex', filterComplex,
-      '-map', '[out]',
       '-c:a', 'pcm_s16le', // Use PCM for best quality
       outputFilePath,
     ];
@@ -311,18 +328,78 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
 
     args.jobLog(`Audio redaction successful: ${outputFilePath}`);
 
+    // Now normalize the redacted audio
+    args.jobLog('Normalizing redacted audio');
+    
+    // Get loudness info from variables if available
+    const loudnessInfo = args.variables?.user?.loudnessInfo || '-24';
+    
+    // Create normalized output file path
+    const normalizedFileName = `${fileName}_redacted_normalized${fileExt}`;
+    const normalizedOutputPath = `${audioDir}/${normalizedFileName}`;
+    
+    // Build FFmpeg command for normalization
+    const normalizationArgs = [
+      '-i', outputFilePath,
+      '-bitexact', '-ac', '1',
+      '-strict', '-2',
+      '-af', `loudnorm=I=-24:LRA=7:TP=-2:measured_I=${loudnessInfo}:linear=true:print_format=summary,volume=0.90`,
+      '-c:a', 'pcm_s16le',
+      normalizedOutputPath,
+    ];
+    
+    args.jobLog(`Executing FFmpeg command to normalize audio`);
+    
+    // Execute FFmpeg command for normalization
+    const normCli = new CLI({
+      cli: args.ffmpegPath,
+      spawnArgs: normalizationArgs,
+      spawnOpts: {},
+      jobLog: args.jobLog,
+      outputFilePath: normalizedOutputPath,
+      inputFileObj: args.inputFileObj,
+      logFullCliOutput: args.logFullCliOutput,
+      updateWorker: args.updateWorker,
+      args,
+    });
+    
+    const normRes = await normCli.runCli();
+    
+    if (normRes.cliExitCode !== 0) {
+      args.jobLog('FFmpeg audio normalization failed');
+      // Continue with the unnormalized audio
+      args.variables = {
+        ...args.variables,
+        user: {
+          ...args.variables.user,
+          redactedAudioPath: outputFilePath,
+        },
+      };
+      
+      return {
+        outputFileObj: {
+          _id: outputFilePath,
+        },
+        outputNumber: 1, // Success with unnormalized audio
+        variables: args.variables,
+      };
+    }
+    
+    args.jobLog(`Audio normalization successful: ${normalizedOutputPath}`);
+
     // Update variables for downstream plugins
     args.variables = {
       ...args.variables,
       user: {
         ...args.variables.user,
-        redactedAudioPath: outputFilePath,
+        redactedAudioPath: normalizedOutputPath,
+        unnormalizedRedactedAudioPath: outputFilePath,
       },
     };
 
     return {
       outputFileObj: {
-        _id: outputFilePath,
+        _id: normalizedOutputPath,
       },
       outputNumber: 1, // Success
       variables: args.variables,
