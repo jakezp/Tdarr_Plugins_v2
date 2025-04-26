@@ -105,15 +105,26 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       };
     }
 
-    // Get the combined audio file with redacted center channel
-    const combinedAudioPath = args.variables?.user?.combinedAudioPath;
-    if (!combinedAudioPath) {
-      args.jobLog('No combined audio file found');
-      return {
-        outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Failed
-        variables: args.variables,
-      };
+    // Get the processed audio file - either combined (for 5.1) or directly redacted (for stereo)
+    let processedAudioPath = args.variables?.user?.combinedAudioPath;
+    
+    // If no combined audio path is found, check if we have a redacted audio path (for stereo files)
+    if (!processedAudioPath) {
+      processedAudioPath = args.variables?.user?.redactedAudioPath;
+      args.jobLog('No combined audio file found, checking for redacted audio (stereo case)');
+      
+      if (!processedAudioPath) {
+        args.jobLog('No processed audio file found (neither combined nor redacted)');
+        return {
+          outputFileObj: args.inputFileObj,
+          outputNumber: 2, // Failed
+          variables: args.variables,
+        };
+      }
+      
+      args.jobLog(`Using redacted audio path for stereo file: ${processedAudioPath}`);
+    } else {
+      args.jobLog(`Using combined audio path for 5.1 file: ${processedAudioPath}`);
     }
 
     // Get the original audio file (optional)
@@ -146,7 +157,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     let ffmpegCmd = `${args.ffmpegPath} -y`;
     
     // Add input files
-    ffmpegCmd += ` -i "${originalVideoPath}" -i "${combinedAudioPath}"`;
+    ffmpegCmd += ` -i "${originalVideoPath}" -i "${processedAudioPath}"`;
     
     // Add original audio input if available and requested
     if (originalAudioPath && includeOriginalAudio) {
