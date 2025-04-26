@@ -189,20 +189,21 @@ const plugin = async (file, librarySettings, inputs, otherArguments) => {
 
   // Check if the file has 5.1 audio
   if (!has5point1Audio(file)) {
-    response.infoLog += 'File does not have 5.1 audio. Skipping. \n';
+    response.infoLog = 'File does not have 5.1 audio. Skipping.';
     return response;
   }
 
-  response.infoLog += 'File has 5.1 audio. Processing... \n';
+  // Clear previous log entries and start fresh with a single string
+  response.infoLog = 'File has 5.1 audio. Processing... - ';
   
-  // Log the input parameters
-  response.infoLog += `WhisperX Host: ${inputs.whisperHost} \n`;
-  response.infoLog += `WhisperX Port: ${inputs.whisperPort} \n`;
-  response.infoLog += `Profanity Filter Level: ${inputs.profanityFilterLevel} \n`;
-  response.infoLog += `Keep Original Audio: ${keepOriginalAudio} \n`;
-  response.infoLog += `Generate Subtitles: ${generateSubtitles} \n`;
-  response.infoLog += `Beep Frequency: ${inputs.beepFrequency} Hz \n`;
-  response.infoLog += `Debug Mode: ${debugMode} \n`;
+  // Log the input parameters with dashes instead of newlines
+  response.infoLog += `WhisperX Host: ${inputs.whisperHost} - `;
+  response.infoLog += `WhisperX Port: ${inputs.whisperPort} - `;
+  response.infoLog += `Profanity Filter Level: ${inputs.profanityFilterLevel} - `;
+  response.infoLog += `Keep Original Audio: ${keepOriginalAudio} - `;
+  response.infoLog += `Generate Subtitles: ${generateSubtitles} - `;
+  response.infoLog += `Beep Frequency: ${inputs.beepFrequency} Hz - `;
+  response.infoLog += `Debug Mode: ${debugMode}`;
 
   // For testing purposes, if we're in a test environment, return early
   if (process.env.NODE_ENV === 'test' || 
@@ -216,10 +217,10 @@ const plugin = async (file, librarySettings, inputs, otherArguments) => {
     // Test connection to WhisperX service
     const connectionSuccess = await testWhisperXConnection(inputs.whisperHost, inputs.whisperPort);
     if (!connectionSuccess) {
-      response.infoLog += `Failed to connect to WhisperX service at ${inputs.whisperHost}:${inputs.whisperPort}. Please check if the service is running and accessible. \n`;
+      response.infoLog += ` - Failed to connect to WhisperX service at ${inputs.whisperHost}:${inputs.whisperPort}. Please check if the service is running and accessible.`;
       return response;
     }
-    response.infoLog += 'Successfully connected to WhisperX service \n';
+    response.infoLog += ' - Successfully connected to WhisperX service';
 
     // For Phase 1 and 2, we'll implement a simple approach that just applies a high-pass filter
     // to the center channel to simulate bleeping out profanity
@@ -264,13 +265,13 @@ const plugin = async (file, librarySettings, inputs, otherArguments) => {
     // Set response
     response.processFile = true;
     response.preset = ffmpegCommand;
-    response.infoLog += 'Processing complete \n';
+    response.infoLog += ' - Processing complete';
     
     return response;
   } catch (error) {
-    response.infoLog += `Error: ${error.message} \n`;
+    response.infoLog += ` - Error: ${error.message}`;
     if (debugMode) {
-      response.infoLog += `Error details: ${error.stack} \n`;
+      response.infoLog += ` - Error details: ${error.stack}`;
     }
     return response;
   }
