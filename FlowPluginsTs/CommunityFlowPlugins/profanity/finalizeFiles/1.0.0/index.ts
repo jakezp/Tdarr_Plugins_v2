@@ -194,7 +194,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
 
       // Move the current file to the temporary path
       await fileMoveOrCopy({
-        operation: 'copy',
+        operation: 'move', // Use move instead of copy to avoid leaving the _redacted file behind
         sourcePath: currentPath,
         destinationPath: tempPath,
         args,
@@ -279,19 +279,42 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         
         args.jobLog(`Using original filename for SRT: ${newSrtFileName}`);
         
-        args.jobLog(`${copyOrMoveSrts === 'copy' ? 'Copying' : 'Moving'} ${srtFile} to ${newSrtPath}`);
+        // Create a temporary path for the SRT file
+        const tempSrtPath = `${newSrtPath}.tmp`;
+        
+        args.jobLog(`Moving ${srtFile} to temporary path: ${tempSrtPath}`);
         
         try {
-          // Copy or move the SRT file
+          // First move the SRT file to a temporary path
           await fileMoveOrCopy({
-            operation: copyOrMoveSrts as 'copy' | 'move',
+            operation: 'move', // Always move to avoid leaving _redacted files behind
             sourcePath: srtFile,
+            destinationPath: tempSrtPath,
+            args,
+          });
+          
+          // Check if the destination SRT file exists
+          const destSrtExists = await fs.promises.access(newSrtPath)
+            .then(() => true)
+            .catch(() => false);
+          
+          // Delete the destination SRT file if it exists
+          if (destSrtExists) {
+            args.jobLog(`Deleting existing SRT file: ${newSrtPath}`);
+            await fsp.unlink(newSrtPath);
+          }
+          
+          // Move the temporary SRT file to the final path
+          await fileMoveOrCopy({
+            operation: 'move',
+            sourcePath: tempSrtPath,
             destinationPath: newSrtPath,
             args,
           });
-          args.jobLog(`Successfully ${copyOrMoveSrts === 'copy' ? 'copied' : 'moved'} SRT file to ${newSrtPath}`);
+          
+          args.jobLog(`Successfully moved SRT file to ${newSrtPath}`);
         } catch (error) {
-          args.jobLog(`Error ${copyOrMoveSrts === 'copy' ? 'copying' : 'moving'} SRT file: ${error}`);
+          args.jobLog(`Error handling SRT file: ${error}`);
         }
       }
     }

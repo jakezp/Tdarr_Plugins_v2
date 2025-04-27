@@ -219,7 +219,7 @@ function findSrtFilesInWorkingArea(workingDir, maxDepth) {
 }
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, replaceOriginalFile, copySrtFiles, copyOrMoveSrts, currentPath, originalPath, currentDir, originalDir, originalFileName, originalExt, finalPath, tempPath, originalFileExists, currentFileIsNotOriginal, srtFiles, subtitlePath, error_2, tempDir, tempDirFiles, _i, srtFiles_1, srtFile, srtFileName, newSrtFileName, newSrtPath, error_3, error_4, errorMessage;
+    var lib, replaceOriginalFile, copySrtFiles, copyOrMoveSrts, currentPath, originalPath, currentDir, originalDir, originalFileName, originalExt, finalPath, tempPath, originalFileExists, currentFileIsNotOriginal, srtFiles, subtitlePath, error_2, tempDir, tempDirFiles, _i, srtFiles_1, srtFile, srtFileName, newSrtFileName, newSrtPath, tempSrtPath, destSrtExists, error_3, error_4, errorMessage;
     var _a, _b;
     return __generator(this, function (_c) {
         switch (_c.label) {
@@ -230,7 +230,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 args.jobLog('Starting finalization of files');
                 _c.label = 1;
             case 1:
-                _c.trys.push([1, 22, , 23]);
+                _c.trys.push([1, 26, , 27]);
                 replaceOriginalFile = args.inputs.replaceOriginalFile;
                 copySrtFiles = args.inputs.copySrtFiles;
                 copyOrMoveSrts = args.inputs.copyOrMoveSrts;
@@ -266,7 +266,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 tempPath = "".concat(originalPath, ".tmp");
                 // Move the current file to the temporary path
                 return [4 /*yield*/, (0, fileMoveOrCopy_1.default)({
-                        operation: 'copy',
+                        operation: 'move',
                         sourcePath: currentPath,
                         destinationPath: tempPath,
                         args: args,
@@ -300,7 +300,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 finalPath = originalPath;
                 _c.label = 7;
             case 7:
-                if (!copySrtFiles) return [3 /*break*/, 21];
+                if (!copySrtFiles) return [3 /*break*/, 25];
                 args.jobLog("".concat(copyOrMoveSrts === 'copy' ? 'Copying' : 'Moving', " SRT files to original directory"));
                 srtFiles = [];
                 if (!((_b = (_a = args.variables) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.subtitlePath)) return [3 /*break*/, 11];
@@ -343,36 +343,59 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 _i = 0, srtFiles_1 = srtFiles;
                 _c.label = 16;
             case 16:
-                if (!(_i < srtFiles_1.length)) return [3 /*break*/, 21];
+                if (!(_i < srtFiles_1.length)) return [3 /*break*/, 25];
                 srtFile = srtFiles_1[_i];
                 srtFileName = path.basename(srtFile);
                 newSrtFileName = "".concat(originalFileName, ".srt");
                 newSrtPath = path.join(originalDir, newSrtFileName);
                 args.jobLog("Using original filename for SRT: ".concat(newSrtFileName));
-                args.jobLog("".concat(copyOrMoveSrts === 'copy' ? 'Copying' : 'Moving', " ").concat(srtFile, " to ").concat(newSrtPath));
+                tempSrtPath = "".concat(newSrtPath, ".tmp");
+                args.jobLog("Moving ".concat(srtFile, " to temporary path: ").concat(tempSrtPath));
                 _c.label = 17;
             case 17:
-                _c.trys.push([17, 19, , 20]);
-                // Copy or move the SRT file
+                _c.trys.push([17, 23, , 24]);
+                // First move the SRT file to a temporary path
                 return [4 /*yield*/, (0, fileMoveOrCopy_1.default)({
-                        operation: copyOrMoveSrts,
+                        operation: 'move',
                         sourcePath: srtFile,
-                        destinationPath: newSrtPath,
+                        destinationPath: tempSrtPath,
                         args: args,
                     })];
             case 18:
-                // Copy or move the SRT file
+                // First move the SRT file to a temporary path
                 _c.sent();
-                args.jobLog("Successfully ".concat(copyOrMoveSrts === 'copy' ? 'copied' : 'moved', " SRT file to ").concat(newSrtPath));
-                return [3 /*break*/, 20];
+                return [4 /*yield*/, fs.promises.access(newSrtPath)
+                        .then(function () { return true; })
+                        .catch(function () { return false; })];
             case 19:
-                error_3 = _c.sent();
-                args.jobLog("Error ".concat(copyOrMoveSrts === 'copy' ? 'copying' : 'moving', " SRT file: ").concat(error_3));
-                return [3 /*break*/, 20];
+                destSrtExists = _c.sent();
+                if (!destSrtExists) return [3 /*break*/, 21];
+                args.jobLog("Deleting existing SRT file: ".concat(newSrtPath));
+                return [4 /*yield*/, fs_1.promises.unlink(newSrtPath)];
             case 20:
+                _c.sent();
+                _c.label = 21;
+            case 21: 
+            // Move the temporary SRT file to the final path
+            return [4 /*yield*/, (0, fileMoveOrCopy_1.default)({
+                    operation: 'move',
+                    sourcePath: tempSrtPath,
+                    destinationPath: newSrtPath,
+                    args: args,
+                })];
+            case 22:
+                // Move the temporary SRT file to the final path
+                _c.sent();
+                args.jobLog("Successfully moved SRT file to ".concat(newSrtPath));
+                return [3 /*break*/, 24];
+            case 23:
+                error_3 = _c.sent();
+                args.jobLog("Error handling SRT file: ".concat(error_3));
+                return [3 /*break*/, 24];
+            case 24:
                 _i++;
                 return [3 /*break*/, 16];
-            case 21:
+            case 25:
                 args.jobLog('Files finalized successfully');
                 return [2 /*return*/, {
                         outputFileObj: {
@@ -381,7 +404,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         outputNumber: 1,
                         variables: args.variables,
                     }];
-            case 22:
+            case 26:
                 error_4 = _c.sent();
                 errorMessage = error_4 instanceof Error ? error_4.message : 'Unknown error';
                 args.jobLog("Error in finalizing files: ".concat(errorMessage));
@@ -390,7 +413,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         outputNumber: 2,
                         variables: args.variables,
                     }];
-            case 23: return [2 /*return*/];
+            case 27: return [2 /*return*/];
         }
     });
 }); };
