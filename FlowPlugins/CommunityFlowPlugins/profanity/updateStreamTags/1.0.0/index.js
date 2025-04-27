@@ -140,7 +140,7 @@ var details = function () { return ({
 exports.details = details;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, redactedAudioTitle_1, originalAudioTitle_1, subtitleTitle_1, defaultLanguage_1, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, fs_1, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, metadataArgs_1, audioStreamIndex_1, subtitleStreamIndex_1, fileDir, fileName, fileExt, outputFilePath, ffmpegArgs, cli, res, fs, error_2, errorMessage;
+    var lib, redactedAudioTitle_1, originalAudioTitle_1, subtitleTitle_1, defaultLanguage_1, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, fs_1, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, metadataArgs_1, audioStreamIndex_1, subtitleStreamIndex_1, videoStreamIndex_1, fileDir, fileName, fileExt, outputFilePath, ffmpegArgs, cli, res, fs, error_2, errorMessage;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -251,13 +251,22 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 metadataArgs_1 = [];
                 audioStreamIndex_1 = 0;
                 subtitleStreamIndex_1 = 0;
-                // Process each stream
+                videoStreamIndex_1 = 0;
                 streamInfo.streams.forEach(function (stream, index) {
-                    var _a, _b, _c;
-                    if (stream.codec_type === 'audio') {
+                    var _a, _b, _c, _d;
+                    if (stream.codec_type === 'video') {
+                        // Set language for video streams
+                        metadataArgs_1.push("-metadata:s:v:".concat(videoStreamIndex_1), "language=".concat(defaultLanguage_1));
+                        // Add description if it doesn't exist
+                        if (!((_a = stream.tags) === null || _a === void 0 ? void 0 : _a.title)) {
+                            metadataArgs_1.push("-metadata:s:v:".concat(videoStreamIndex_1), "title=Video");
+                        }
+                        videoStreamIndex_1++;
+                    }
+                    else if (stream.codec_type === 'audio') {
                         // Get codec and language
-                        var codec = ((_a = stream.codec_name) === null || _a === void 0 ? void 0 : _a.toUpperCase()) || 'AC3';
-                        var lang = ((_b = stream.tags) === null || _b === void 0 ? void 0 : _b.language) || defaultLanguage_1;
+                        var codec = ((_b = stream.codec_name) === null || _b === void 0 ? void 0 : _b.toUpperCase()) || 'AC3';
+                        var lang = ((_c = stream.tags) === null || _c === void 0 ? void 0 : _c.language) || defaultLanguage_1;
                         // Set title based on whether it's the first audio stream (redacted) or not (original)
                         var title = void 0;
                         if (audioStreamIndex_1 === 0) {
@@ -286,7 +295,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     }
                     else if (stream.codec_type === 'subtitle') {
                         // Get language
-                        var lang = ((_c = stream.tags) === null || _c === void 0 ? void 0 : _c.language) || defaultLanguage_1;
+                        var lang = ((_d = stream.tags) === null || _d === void 0 ? void 0 : _d.language) || defaultLanguage_1;
                         // Set title
                         var title = subtitleTitle_1.replace('{LANG}', lang.toUpperCase());
                         // Add metadata arguments
@@ -295,6 +304,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         subtitleStreamIndex_1++;
                     }
                 });
+                args.jobLog("Setting language tags for ".concat(videoStreamIndex_1, " video streams, ").concat(audioStreamIndex_1, " audio streams, and ").concat(subtitleStreamIndex_1, " subtitle streams"));
                 fileDir = path.dirname(filePath);
                 fileName = path.basename(filePath, path.extname(filePath));
                 fileExt = path.extname(filePath);

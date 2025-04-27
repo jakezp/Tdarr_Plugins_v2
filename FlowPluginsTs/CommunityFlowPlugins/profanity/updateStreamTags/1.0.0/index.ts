@@ -196,8 +196,20 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     let subtitleStreamIndex = 0;
 
     // Process each stream
+    let videoStreamIndex = 0;
+    
     streamInfo.streams.forEach((stream: any, index: number) => {
-      if (stream.codec_type === 'audio') {
+      if (stream.codec_type === 'video') {
+        // Set language for video streams
+        metadataArgs.push(`-metadata:s:v:${videoStreamIndex}`, `language=${defaultLanguage}`);
+        
+        // Add description if it doesn't exist
+        if (!stream.tags?.title) {
+          metadataArgs.push(`-metadata:s:v:${videoStreamIndex}`, `title=Video`);
+        }
+        
+        videoStreamIndex++;
+      } else if (stream.codec_type === 'audio') {
         // Get codec and language
         const codec = stream.codec_name?.toUpperCase() || 'AC3';
         const lang = stream.tags?.language || defaultLanguage;
@@ -242,6 +254,8 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         subtitleStreamIndex++;
       }
     });
+    
+    args.jobLog(`Setting language tags for ${videoStreamIndex} video streams, ${audioStreamIndex} audio streams, and ${subtitleStreamIndex} subtitle streams`);
 
     // Create a temporary output file
     const fileDir = path.dirname(filePath);

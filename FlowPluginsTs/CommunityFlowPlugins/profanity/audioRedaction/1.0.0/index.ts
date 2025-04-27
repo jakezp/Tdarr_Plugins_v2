@@ -453,7 +453,8 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     
     // Preserve the channel count for normalization
     // For center channel, keep it mono; for stereo, preserve stereo
-    const normCmd = `${args.ffmpegPath} -i "${outputFilePath}" -bitexact -ac ${outputChannels} -strict -2 -af "loudnorm=I=-24:LRA=7:TP=-2:measured_I=${loudnessInfo}:linear=true:print_format=summary,volume=0.90" -c:a ${codec} -ar ${sampleRate} -b:a ${bitRate} "${normalizedOutputPath}"`;
+    // Use a higher target loudness (-16 LUFS) and remove the volume reduction
+    const normCmd = `${args.ffmpegPath} -i "${outputFilePath}" -bitexact -ac ${outputChannels} -strict -2 -af "loudnorm=I=-16:LRA=7:TP=-1:measured_I=${loudnessInfo}:linear=true:print_format=summary" -c:a ${codec} -ar ${sampleRate} -b:a ${bitRate} "${normalizedOutputPath}"`;
     
     // Write the script file
     fs.writeFileSync(normScriptPath, normCmd);

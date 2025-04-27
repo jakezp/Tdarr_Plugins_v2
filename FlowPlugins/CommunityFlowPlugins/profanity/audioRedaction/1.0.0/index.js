@@ -430,7 +430,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 normalizedFileName = "".concat(fileName, "_redacted_normalized").concat(fileExt);
                 normalizedOutputPath = "".concat(audioDir, "/").concat(normalizedFileName);
                 normScriptPath = "".concat(scriptDir, "/ffmpeg_normalize_").concat(Date.now(), ".sh");
-                normCmd = "".concat(args.ffmpegPath, " -i \"").concat(outputFilePath, "\" -bitexact -ac ").concat(outputChannels, " -strict -2 -af \"loudnorm=I=-24:LRA=7:TP=-2:measured_I=").concat(loudnessInfo, ":linear=true:print_format=summary,volume=0.90\" -c:a ").concat(codec, " -ar ").concat(sampleRate, " -b:a ").concat(bitRate, " \"").concat(normalizedOutputPath, "\"");
+                normCmd = "".concat(args.ffmpegPath, " -i \"").concat(outputFilePath, "\" -bitexact -ac ").concat(outputChannels, " -strict -2 -af \"loudnorm=I=-16:LRA=7:TP=-1:measured_I=").concat(loudnessInfo, ":linear=true:print_format=summary\" -c:a ").concat(codec, " -ar ").concat(sampleRate, " -b:a ").concat(bitRate, " \"").concat(normalizedOutputPath, "\"");
                 // Write the script file
                 fs.writeFileSync(normScriptPath, normCmd);
                 fs.chmodSync(normScriptPath, '755'); // Make it executable
