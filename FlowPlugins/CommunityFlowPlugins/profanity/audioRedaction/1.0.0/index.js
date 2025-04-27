@@ -83,6 +83,7 @@ exports.plugin = exports.details = void 0;
 var cliUtils_1 = require("../../../../FlowHelpers/1.0.0/cliUtils");
 var fileUtils_1 = require("../../../../FlowHelpers/1.0.0/fileUtils");
 var path = __importStar(require("path"));
+var fs = __importStar(require("fs"));
 /* eslint no-plusplus: ["error", { "allowForLoopAfterthoughts": true }] */
 var details = function () { return ({
     name: 'Audio Redaction',
@@ -230,22 +231,27 @@ function createFFmpegFilter(profanitySegments, nonProfanityIntervals, duration, 
 }
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, audioFilePath, bleepFrequency, bleepVolume, extraBufferTime_1, profanitySegments, duration, lastSegment, nonProfanityIntervals, filterComplex, audioDir, fileName, fileExt, outputFilePath, scriptDir, scriptPath, ffmpegCmd, fs, ffmpegArgs, cli, res, loudnessInfo, normalizedFileName, normalizedOutputPath, normScriptPath, normCmd, normalizationArgs, normCli, normRes, error_1, errorMessage;
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
-    return __generator(this, function (_l) {
-        switch (_l.label) {
+    var lib, audioFilePath, bleepFrequency, bleepVolume, extraBufferTime_1, channels, sampleRate, bitRate, codec, channelLayout, profanitySegments, ffprobeCmd, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, streamInfo, audioInfo, error_1, duration, lastSegment, nonProfanityIntervals, filterComplex, audioDir, fileName, fileExt, outputFilePath, scriptDir, scriptPath, isCenterChannel, outputChannels, ffmpegCmd, ffmpegArgs, cli, res, loudnessInfo, normalizedFileName, normalizedOutputPath, normScriptPath, normCmd, normalizationArgs, normCli, normRes, error_2, errorMessage;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+    return __generator(this, function (_o) {
+        switch (_o.label) {
             case 0:
                 lib = require('../../../../../methods/lib')();
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
                 args.inputs = lib.loadDefaultValues(args.inputs, details);
                 args.jobLog('Starting audio redaction for profanity');
-                _l.label = 1;
+                _o.label = 1;
             case 1:
-                _l.trys.push([1, 4, , 5]);
+                _o.trys.push([1, 8, , 9]);
                 audioFilePath = args.inputs.audioFilePath;
                 bleepFrequency = parseInt(args.inputs.bleepFrequency, 10);
                 bleepVolume = parseFloat(args.inputs.bleepVolume);
                 extraBufferTime_1 = parseFloat(args.inputs.extraBufferTime);
+                channels = 1;
+                sampleRate = '48000';
+                bitRate = '192k';
+                codec = 'ac3';
+                channelLayout = 'mono';
                 // If no audio file path is provided, use the one from the previous plugin
                 if (!audioFilePath) {
                     if ((_b = (_a = args.variables) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.centerChannelPath) {
@@ -288,6 +294,73 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         }];
                 }
                 args.jobLog("Found ".concat(profanitySegments.length, " profanity segments to redact"));
+                ffprobeCmd = [
+                    '-v', 'quiet',
+                    '-print_format', 'json',
+                    '-show_streams',
+                    '-select_streams', 'a:0',
+                    audioFilePath,
+                ];
+                args.jobLog('Getting audio stream info with ffprobe');
+                tempOutputPath = "".concat(path.dirname(audioFilePath), "/ffprobe_output_").concat(Date.now(), ".json");
+                ffprobeFileCmd = [
+                    '-v', 'quiet',
+                    '-print_format', 'json',
+                    '-show_streams',
+                    '-select_streams', 'a:0',
+                    '-o', tempOutputPath,
+                    audioFilePath,
+                ];
+                ffprobeFileCli = new cliUtils_1.CLI({
+                    cli: '/usr/lib/jellyfin-ffmpeg/ffprobe',
+                    spawnArgs: ffprobeFileCmd,
+                    spawnOpts: {},
+                    jobLog: args.jobLog,
+                    outputFilePath: tempOutputPath,
+                    inputFileObj: args.inputFileObj,
+                    logFullCliOutput: args.logFullCliOutput,
+                    updateWorker: args.updateWorker,
+                    args: args,
+                });
+                _o.label = 2;
+            case 2:
+                _o.trys.push([2, 4, , 5]);
+                return [4 /*yield*/, ffprobeFileCli.runCli()];
+            case 3:
+                _o.sent();
+                // Read the output file
+                if (fs.existsSync(tempOutputPath)) {
+                    stdoutContent = fs.readFileSync(tempOutputPath, 'utf8');
+                    streamInfo = JSON.parse(stdoutContent);
+                    if (streamInfo && streamInfo.streams && streamInfo.streams.length > 0) {
+                        audioInfo = streamInfo.streams[0];
+                        // Extract audio parameters
+                        channels = audioInfo.channels || 1;
+                        sampleRate = audioInfo.sample_rate || '48000';
+                        bitRate = audioInfo.bit_rate ? "".concat(Math.ceil(parseInt(audioInfo.bit_rate, 10) / 1000), "k") : '192k';
+                        codec = audioInfo.codec_name || 'ac3';
+                        channelLayout = audioInfo.channel_layout || (channels === 1 ? 'mono' : channels === 2 ? 'stereo' : '5.1');
+                        args.jobLog("Detected audio: ".concat(channels, " channels, ").concat(sampleRate, "Hz, ").concat(bitRate, "bps, codec: ").concat(codec, ", layout: ").concat(channelLayout));
+                    }
+                    // Clean up the temporary file
+                    fs.unlinkSync(tempOutputPath);
+                }
+                return [3 /*break*/, 5];
+            case 4:
+                error_1 = _o.sent();
+                args.jobLog("Error getting audio info: ".concat(error_1));
+                // Continue with default settings
+                args.jobLog("Using default audio parameters: ".concat(channels, " channels, ").concat(sampleRate, "Hz, ").concat(bitRate, "bps, codec: ").concat(codec));
+                return [3 /*break*/, 5];
+            case 5:
+                // Store audio info in variables for downstream plugins
+                args.variables = __assign(__assign({}, args.variables), { user: __assign(__assign({}, args.variables.user), { audioInfo: JSON.stringify({
+                            channels: channels,
+                            sampleRate: sampleRate,
+                            bitRate: bitRate,
+                            codec: codec,
+                            channelLayout: channelLayout
+                        }) }) });
                 // Apply extra buffer time if specified
                 if (extraBufferTime_1 > 0) {
                     args.jobLog("Adding extra buffer time of ".concat(extraBufferTime_1, " seconds to each segment"));
@@ -316,8 +389,10 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 outputFilePath = "".concat(audioDir, "/").concat(fileName, "_redacted").concat(fileExt);
                 scriptDir = path.dirname(audioFilePath);
                 scriptPath = "".concat(scriptDir, "/ffmpeg_redact_").concat(Date.now(), ".sh");
-                ffmpegCmd = "".concat(args.ffmpegPath, " -i \"").concat(audioFilePath, "\" -filter_complex \"").concat(filterComplex, "\" -c:a ac3 \"").concat(outputFilePath, "\"");
-                fs = require('fs');
+                isCenterChannel = ((_k = (_j = args.variables) === null || _j === void 0 ? void 0 : _j.user) === null || _k === void 0 ? void 0 : _k.centerChannelPath) === audioFilePath;
+                outputChannels = isCenterChannel ? 1 : channels;
+                ffmpegCmd = "".concat(args.ffmpegPath, " -i \"").concat(audioFilePath, "\" -filter_complex \"").concat(filterComplex, "\" -c:a ").concat(codec, " -ar ").concat(sampleRate, " -b:a ").concat(bitRate, " -ac ").concat(outputChannels, " \"").concat(outputFilePath, "\"");
+                // Write the script file
                 fs.writeFileSync(scriptPath, ffmpegCmd);
                 fs.chmodSync(scriptPath, '755'); // Make it executable
                 args.jobLog("Created FFmpeg script: ".concat(scriptPath));
@@ -338,8 +413,8 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     args: args,
                 });
                 return [4 /*yield*/, cli.runCli()];
-            case 2:
-                res = _l.sent();
+            case 6:
+                res = _o.sent();
                 if (res.cliExitCode !== 0) {
                     args.jobLog('FFmpeg audio redaction failed');
                     return [2 /*return*/, {
@@ -351,11 +426,11 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 args.jobLog("Audio redaction successful: ".concat(outputFilePath));
                 // Now normalize the redacted audio
                 args.jobLog('Normalizing redacted audio');
-                loudnessInfo = ((_k = (_j = args.variables) === null || _j === void 0 ? void 0 : _j.user) === null || _k === void 0 ? void 0 : _k.loudnessInfo) || '-24';
+                loudnessInfo = ((_m = (_l = args.variables) === null || _l === void 0 ? void 0 : _l.user) === null || _m === void 0 ? void 0 : _m.loudnessInfo) || '-24';
                 normalizedFileName = "".concat(fileName, "_redacted_normalized").concat(fileExt);
                 normalizedOutputPath = "".concat(audioDir, "/").concat(normalizedFileName);
                 normScriptPath = "".concat(scriptDir, "/ffmpeg_normalize_").concat(Date.now(), ".sh");
-                normCmd = "".concat(args.ffmpegPath, " -i \"").concat(outputFilePath, "\" -bitexact -ac 1 -strict -2 -af \"loudnorm=I=-24:LRA=7:TP=-2:measured_I=").concat(loudnessInfo, ":linear=true:print_format=summary,volume=0.90\" -c:a ac3 \"").concat(normalizedOutputPath, "\"");
+                normCmd = "".concat(args.ffmpegPath, " -i \"").concat(outputFilePath, "\" -bitexact -ac ").concat(outputChannels, " -strict -2 -af \"loudnorm=I=-24:LRA=7:TP=-2:measured_I=").concat(loudnessInfo, ":linear=true:print_format=summary,volume=0.90\" -c:a ").concat(codec, " -ar ").concat(sampleRate, " -b:a ").concat(bitRate, " \"").concat(normalizedOutputPath, "\"");
                 // Write the script file
                 fs.writeFileSync(normScriptPath, normCmd);
                 fs.chmodSync(normScriptPath, '755'); // Make it executable
@@ -377,8 +452,8 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     args: args,
                 });
                 return [4 /*yield*/, normCli.runCli()];
-            case 3:
-                normRes = _l.sent();
+            case 7:
+                normRes = _o.sent();
                 // Clean up the script files
                 try {
                     fs.unlinkSync(scriptPath);
@@ -409,16 +484,16 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         outputNumber: 1,
                         variables: args.variables,
                     }];
-            case 4:
-                error_1 = _l.sent();
-                errorMessage = error_1 instanceof Error ? error_1.message : 'Unknown error';
+            case 8:
+                error_2 = _o.sent();
+                errorMessage = error_2 instanceof Error ? error_2.message : 'Unknown error';
                 args.jobLog("Error in audio redaction: ".concat(errorMessage));
                 return [2 /*return*/, {
                         outputFileObj: args.inputFileObj,
                         outputNumber: 2,
                         variables: args.variables,
                     }];
-            case 5: return [2 /*return*/];
+            case 9: return [2 /*return*/];
         }
     });
 }); };

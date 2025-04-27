@@ -140,7 +140,7 @@ var details = function () { return ({
 exports.details = details;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, originalAudioPath, redactedCenterPath, outputFormat, audioDir, fileName, fileExt, outputFilePath, scriptDir, scriptPath, ffmpegCmd, ffmpegArgs, cli, res, error_1, errorMessage;
+    var lib, originalAudioPath, redactedCenterPath, outputFormat, ffprobeCmd, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, channels, sampleRate, bitRate, codec, channelLayout, stdoutContent, streamInfo, audioInfo, error_1, audioDir, fileName, fileExt, outputFilePath, scriptDir, scriptPath, filterComplex, ffmpegCmd, ffmpegArgs, cli, res, error_2, errorMessage;
     var _a, _b, _c, _d;
     return __generator(this, function (_e) {
         switch (_e.label) {
@@ -151,7 +151,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 args.jobLog('Starting audio combination for profanity redaction');
                 _e.label = 1;
             case 1:
-                _e.trys.push([1, 3, , 4]);
+                _e.trys.push([1, 7, , 8]);
                 originalAudioPath = args.inputs.originalAudioPath;
                 redactedCenterPath = args.inputs.redactedCenterPath;
                 outputFormat = args.inputs.outputFormat;
@@ -185,6 +185,78 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                             }];
                     }
                 }
+                ffprobeCmd = [
+                    '-v', 'quiet',
+                    '-print_format', 'json',
+                    '-show_streams',
+                    '-select_streams', 'a:0',
+                    originalAudioPath,
+                ];
+                args.jobLog('Getting audio stream info with ffprobe');
+                tempOutputPath = "".concat(path.dirname(originalAudioPath), "/ffprobe_output_").concat(Date.now(), ".json");
+                ffprobeFileCmd = [
+                    '-v', 'quiet',
+                    '-print_format', 'json',
+                    '-show_streams',
+                    '-select_streams', 'a:0',
+                    '-o', tempOutputPath,
+                    originalAudioPath,
+                ];
+                ffprobeFileCli = new cliUtils_1.CLI({
+                    cli: '/usr/lib/jellyfin-ffmpeg/ffprobe',
+                    spawnArgs: ffprobeFileCmd,
+                    spawnOpts: {},
+                    jobLog: args.jobLog,
+                    outputFilePath: tempOutputPath,
+                    inputFileObj: args.inputFileObj,
+                    logFullCliOutput: args.logFullCliOutput,
+                    updateWorker: args.updateWorker,
+                    args: args,
+                });
+                channels = 6;
+                sampleRate = '48000';
+                bitRate = '448k';
+                codec = outputFormat === 'same' ? 'ac3' : outputFormat;
+                channelLayout = '5.1';
+                _e.label = 2;
+            case 2:
+                _e.trys.push([2, 4, , 5]);
+                return [4 /*yield*/, ffprobeFileCli.runCli()];
+            case 3:
+                _e.sent();
+                // Read the output file
+                if (fs.existsSync(tempOutputPath)) {
+                    stdoutContent = fs.readFileSync(tempOutputPath, 'utf8');
+                    streamInfo = JSON.parse(stdoutContent);
+                    if (streamInfo && streamInfo.streams && streamInfo.streams.length > 0) {
+                        audioInfo = streamInfo.streams[0];
+                        // Extract audio parameters (with fallbacks if values are missing)
+                        channels = audioInfo.channels || 6;
+                        sampleRate = audioInfo.sample_rate || '48000';
+                        bitRate = audioInfo.bit_rate ? "".concat(Math.ceil(parseInt(audioInfo.bit_rate, 10) / 1000), "k") : '448k';
+                        codec = outputFormat === 'same' ? (audioInfo.codec_name || 'ac3') : outputFormat;
+                        channelLayout = audioInfo.channel_layout || '5.1';
+                        args.jobLog("Detected audio: ".concat(channels, " channels, ").concat(sampleRate, "Hz, ").concat(bitRate, "bps, codec: ").concat(codec, ", layout: ").concat(channelLayout));
+                    }
+                    else {
+                        args.jobLog('No audio streams found in the file');
+                    }
+                    // Clean up the temporary file
+                    fs.unlinkSync(tempOutputPath);
+                }
+                return [3 /*break*/, 5];
+            case 4:
+                error_1 = _e.sent();
+                args.jobLog("Error getting audio info: ".concat(error_1));
+                return [3 /*break*/, 5];
+            case 5:
+                // No need for fallbacks here since we initialized with defaults
+                // and provided fallbacks during extraction
+                // Verify we have a 5.1 or greater channel layout
+                if (channels < 6) {
+                    args.jobLog("Warning: Original audio has only ".concat(channels, " channels, expected at least 6 for 5.1 audio"));
+                    args.jobLog('Will attempt to process anyway, but results may not be as expected');
+                }
                 audioDir = path.dirname(originalAudioPath);
                 fileName = (0, fileUtils_1.getFileName)(originalAudioPath);
                 fileExt = path.extname(originalAudioPath);
@@ -194,7 +266,19 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 outputFilePath = "".concat(audioDir, "/").concat(fileName, "_combined").concat(fileExt);
                 scriptDir = audioDir;
                 scriptPath = "".concat(scriptDir, "/ffmpeg_combine_").concat(Date.now(), ".sh");
-                ffmpegCmd = "".concat(args.ffmpegPath, " -y -i \"").concat(originalAudioPath, "\" -i \"").concat(redactedCenterPath, "\" -filter_complex \"[0:a]channelsplit=channel_layout=5.1[FL][FR][FC][LFE][BL][BR];[1:a]aformat=channel_layouts=mono[redactedFC];[FL][FR][redactedFC][LFE][BL][BR]amerge=inputs=6[out]\" -map \"[out]\" -c:a ").concat(outputFormat === 'same' ? 'copy' : outputFormat, " \"").concat(outputFilePath, "\"");
+                filterComplex = '';
+                if (channelLayout === '5.1' || channelLayout === '5.1(side)') {
+                    filterComplex = '[0:a]channelsplit=channel_layout=5.1[FL][FR][FC][LFE][BL][BR];[1:a]aformat=channel_layouts=mono[redactedFC];[FL][FR][redactedFC][LFE][BL][BR]amerge=inputs=6[out]';
+                }
+                else if (channelLayout === '7.1') {
+                    filterComplex = '[0:a]channelsplit=channel_layout=7.1[FL][FR][FC][LFE][BL][BR][SL][SR];[1:a]aformat=channel_layouts=mono[redactedFC];[FL][FR][redactedFC][LFE][BL][BR][SL][SR]amerge=inputs=8[out]';
+                }
+                else {
+                    // Default to 5.1 for unknown layouts
+                    filterComplex = '[0:a]channelsplit=channel_layout=5.1[FL][FR][FC][LFE][BL][BR];[1:a]aformat=channel_layouts=mono[redactedFC];[FL][FR][redactedFC][LFE][BL][BR]amerge=inputs=6[out]';
+                    args.jobLog("Warning: Unrecognized channel layout: ".concat(channelLayout, ", defaulting to 5.1 processing"));
+                }
+                ffmpegCmd = "".concat(args.ffmpegPath, " -y -i \"").concat(originalAudioPath, "\" -i \"").concat(redactedCenterPath, "\" -filter_complex \"").concat(filterComplex, "\" -map \"[out]\" -c:a ").concat(codec, " -ar ").concat(sampleRate, " -b:a ").concat(bitRate, " \"").concat(outputFilePath, "\"");
                 // Write the script file
                 fs.writeFileSync(scriptPath, ffmpegCmd);
                 fs.chmodSync(scriptPath, '755'); // Make it executable
@@ -215,7 +299,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     args: args,
                 });
                 return [4 /*yield*/, cli.runCli()];
-            case 2:
+            case 6:
                 res = _e.sent();
                 // Clean up the script file
                 try {
@@ -242,16 +326,16 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         outputNumber: 1,
                         variables: args.variables,
                     }];
-            case 3:
-                error_1 = _e.sent();
-                errorMessage = error_1 instanceof Error ? error_1.message : 'Unknown error';
+            case 7:
+                error_2 = _e.sent();
+                errorMessage = error_2 instanceof Error ? error_2.message : 'Unknown error';
                 args.jobLog("Error in audio combination: ".concat(errorMessage));
                 return [2 /*return*/, {
                         outputFileObj: args.inputFileObj,
                         outputNumber: 2,
                         variables: args.variables,
                     }];
-            case 4: return [2 /*return*/];
+            case 8: return [2 /*return*/];
         }
     });
 }); };

@@ -114,6 +114,88 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         };
       }
     }
+    
+    // Get audio stream info using ffprobe
+    const ffprobeCmd = [
+      '-v', 'quiet',
+      '-print_format', 'json',
+      '-show_streams',
+      '-select_streams', 'a:0',
+      originalAudioPath,
+    ];
+
+    args.jobLog('Getting audio stream info with ffprobe');
+    
+    // Create a temporary file to store the ffprobe output
+    const tempOutputPath = `${path.dirname(originalAudioPath)}/ffprobe_output_${Date.now()}.json`;
+    
+    // Run ffprobe with output to file
+    const ffprobeFileCmd = [
+      '-v', 'quiet',
+      '-print_format', 'json',
+      '-show_streams',
+      '-select_streams', 'a:0',
+      '-o', tempOutputPath,
+      originalAudioPath,
+    ];
+    
+    const ffprobeFileCli = new CLI({
+      cli: '/usr/lib/jellyfin-ffmpeg/ffprobe',
+      spawnArgs: ffprobeFileCmd,
+      spawnOpts: {},
+      jobLog: args.jobLog,
+      outputFilePath: tempOutputPath,
+      inputFileObj: args.inputFileObj,
+      logFullCliOutput: args.logFullCliOutput,
+      updateWorker: args.updateWorker,
+      args,
+    });
+    
+    // Initialize variables with fallback values
+    let channels = 6; // Default for 5.1 audio
+    let sampleRate = '48000'; // Standard sample rate
+    let bitRate = '448k'; // Good quality for 5.1 audio
+    let codec = outputFormat === 'same' ? 'ac3' : outputFormat;
+    let channelLayout = '5.1'; // Assume 5.1 as default
+    
+    try {
+      await ffprobeFileCli.runCli();
+      
+      // Read the output file
+      if (fs.existsSync(tempOutputPath)) {
+        const stdoutContent = fs.readFileSync(tempOutputPath, 'utf8');
+        const streamInfo = JSON.parse(stdoutContent);
+        
+        if (streamInfo && streamInfo.streams && streamInfo.streams.length > 0) {
+          const audioInfo = streamInfo.streams[0];
+          
+          // Extract audio parameters (with fallbacks if values are missing)
+          channels = audioInfo.channels || 6;
+          sampleRate = audioInfo.sample_rate || '48000';
+          bitRate = audioInfo.bit_rate ? `${Math.ceil(parseInt(audioInfo.bit_rate, 10) / 1000)}k` : '448k';
+          codec = outputFormat === 'same' ? (audioInfo.codec_name || 'ac3') : outputFormat;
+          channelLayout = audioInfo.channel_layout || '5.1';
+          
+          args.jobLog(`Detected audio: ${channels} channels, ${sampleRate}Hz, ${bitRate}bps, codec: ${codec}, layout: ${channelLayout}`);
+        } else {
+          args.jobLog('No audio streams found in the file');
+        }
+        
+        // Clean up the temporary file
+        fs.unlinkSync(tempOutputPath);
+      }
+    } catch (error) {
+      args.jobLog(`Error getting audio info: ${error}`);
+    }
+    
+    // No need for fallbacks here since we initialized with defaults
+    // and provided fallbacks during extraction
+    
+    // Verify we have a 5.1 or greater channel layout
+    if (channels < 6) {
+      args.jobLog(`Warning: Original audio has only ${channels} channels, expected at least 6 for 5.1 audio`);
+      args.jobLog('Will attempt to process anyway, but results may not be as expected');
+    }
 
     // Create output file path in the same directory as the original audio
     const audioDir = path.dirname(originalAudioPath);
@@ -133,7 +215,21 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     // Build the FFmpeg command to replace the center channel
     // We'll use the channelmap filter to extract all channels from the original audio
     // Then replace the center channel with the redacted one and recombine
-    const ffmpegCmd = `${args.ffmpegPath} -y -i "${originalAudioPath}" -i "${redactedCenterPath}" -filter_complex "[0:a]channelsplit=channel_layout=5.1[FL][FR][FC][LFE][BL][BR];[1:a]aformat=channel_layouts=mono[redactedFC];[FL][FR][redactedFC][LFE][BL][BR]amerge=inputs=6[out]" -map "[out]" -c:a ${outputFormat === 'same' ? 'copy' : outputFormat} "${outputFilePath}"`;
+    
+    // Determine the filter complex based on detected channel layout
+    let filterComplex = '';
+    if (channelLayout === '5.1' || channelLayout === '5.1(side)') {
+      filterComplex = '[0:a]channelsplit=channel_layout=5.1[FL][FR][FC][LFE][BL][BR];[1:a]aformat=channel_layouts=mono[redactedFC];[FL][FR][redactedFC][LFE][BL][BR]amerge=inputs=6[out]';
+    } else if (channelLayout === '7.1') {
+      filterComplex = '[0:a]channelsplit=channel_layout=7.1[FL][FR][FC][LFE][BL][BR][SL][SR];[1:a]aformat=channel_layouts=mono[redactedFC];[FL][FR][redactedFC][LFE][BL][BR][SL][SR]amerge=inputs=8[out]';
+    } else {
+      // Default to 5.1 for unknown layouts
+      filterComplex = '[0:a]channelsplit=channel_layout=5.1[FL][FR][FC][LFE][BL][BR];[1:a]aformat=channel_layouts=mono[redactedFC];[FL][FR][redactedFC][LFE][BL][BR]amerge=inputs=6[out]';
+      args.jobLog(`Warning: Unrecognized channel layout: ${channelLayout}, defaulting to 5.1 processing`);
+    }
+    
+    // Build the complete FFmpeg command with quality parameters
+    const ffmpegCmd = `${args.ffmpegPath} -y -i "${originalAudioPath}" -i "${redactedCenterPath}" -filter_complex "${filterComplex}" -map "[out]" -c:a ${codec} -ar ${sampleRate} -b:a ${bitRate} "${outputFilePath}"`;
     
     // Write the script file
     fs.writeFileSync(scriptPath, ffmpegCmd);

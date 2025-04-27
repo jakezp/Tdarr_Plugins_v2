@@ -6,6 +6,7 @@ import {
   IpluginOutputArgs,
 } from '../../../../FlowHelpers/1.0.0/interfaces/interfaces';
 import * as path from 'path';
+import * as fs from 'fs';
 
 /* eslint no-plusplus: ["error", { "allowForLoopAfterthoughts": true }] */
 const details = (): IpluginDetails => ({
@@ -205,6 +206,13 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const bleepFrequency = parseInt(args.inputs.bleepFrequency as string, 10);
     const bleepVolume = parseFloat(args.inputs.bleepVolume as string);
     const extraBufferTime = parseFloat(args.inputs.extraBufferTime as string);
+    
+    // Default audio parameters (will be overridden if we can detect them)
+    let channels = 1;
+    let sampleRate = '48000';
+    let bitRate = '192k';
+    let codec = 'ac3';
+    let channelLayout = 'mono';
 
     // If no audio file path is provided, use the one from the previous plugin
     if (!audioFilePath) {
@@ -250,6 +258,87 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     }
 
     args.jobLog(`Found ${profanitySegments.length} profanity segments to redact`);
+    
+    // Get audio stream info using ffprobe
+    const ffprobeCmd = [
+      '-v', 'quiet',
+      '-print_format', 'json',
+      '-show_streams',
+      '-select_streams', 'a:0',
+      audioFilePath,
+    ];
+
+    args.jobLog('Getting audio stream info with ffprobe');
+    
+    // Create a temporary file to store the ffprobe output
+    const tempOutputPath = `${path.dirname(audioFilePath)}/ffprobe_output_${Date.now()}.json`;
+    
+    // Run ffprobe with output to file
+    const ffprobeFileCmd = [
+      '-v', 'quiet',
+      '-print_format', 'json',
+      '-show_streams',
+      '-select_streams', 'a:0',
+      '-o', tempOutputPath,
+      audioFilePath,
+    ];
+    
+    const ffprobeFileCli = new CLI({
+      cli: '/usr/lib/jellyfin-ffmpeg/ffprobe',
+      spawnArgs: ffprobeFileCmd,
+      spawnOpts: {},
+      jobLog: args.jobLog,
+      outputFilePath: tempOutputPath,
+      inputFileObj: args.inputFileObj,
+      logFullCliOutput: args.logFullCliOutput,
+      updateWorker: args.updateWorker,
+      args,
+    });
+    
+    try {
+      await ffprobeFileCli.runCli();
+      
+      // Read the output file
+      if (fs.existsSync(tempOutputPath)) {
+        const stdoutContent = fs.readFileSync(tempOutputPath, 'utf8');
+        const streamInfo = JSON.parse(stdoutContent);
+        
+        if (streamInfo && streamInfo.streams && streamInfo.streams.length > 0) {
+          const audioInfo = streamInfo.streams[0];
+          
+          // Extract audio parameters
+          channels = audioInfo.channels || 1;
+          sampleRate = audioInfo.sample_rate || '48000';
+          bitRate = audioInfo.bit_rate ? `${Math.ceil(parseInt(audioInfo.bit_rate, 10) / 1000)}k` : '192k';
+          codec = audioInfo.codec_name || 'ac3';
+          channelLayout = audioInfo.channel_layout || (channels === 1 ? 'mono' : channels === 2 ? 'stereo' : '5.1');
+          
+          args.jobLog(`Detected audio: ${channels} channels, ${sampleRate}Hz, ${bitRate}bps, codec: ${codec}, layout: ${channelLayout}`);
+        }
+        
+        // Clean up the temporary file
+        fs.unlinkSync(tempOutputPath);
+      }
+    } catch (error) {
+      args.jobLog(`Error getting audio info: ${error}`);
+      // Continue with default settings
+      args.jobLog(`Using default audio parameters: ${channels} channels, ${sampleRate}Hz, ${bitRate}bps, codec: ${codec}`);
+    }
+    
+    // Store audio info in variables for downstream plugins
+    args.variables = {
+      ...args.variables,
+      user: {
+        ...args.variables.user,
+        audioInfo: JSON.stringify({
+          channels,
+          sampleRate,
+          bitRate,
+          codec,
+          channelLayout
+        })
+      }
+    };
 
     // Apply extra buffer time if specified
     if (extraBufferTime > 0) {
@@ -300,10 +389,16 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     // Create a temporary script file with the FFmpeg command
     const scriptDir = path.dirname(audioFilePath);
     const scriptPath = `${scriptDir}/ffmpeg_redact_${Date.now()}.sh`;
-    const ffmpegCmd = `${args.ffmpegPath} -i "${audioFilePath}" -filter_complex "${filterComplex}" -c:a ac3 "${outputFilePath}"`;
+    
+    // Use detected codec if possible, otherwise default to ac3
+    // For center channel extraction (mono), we keep it mono
+    // For stereo or other formats, we preserve the channel count
+    const isCenterChannel = args.variables?.user?.centerChannelPath === audioFilePath;
+    const outputChannels = isCenterChannel ? 1 : channels;
+    
+    const ffmpegCmd = `${args.ffmpegPath} -i "${audioFilePath}" -filter_complex "${filterComplex}" -c:a ${codec} -ar ${sampleRate} -b:a ${bitRate} -ac ${outputChannels} "${outputFilePath}"`;
     
     // Write the script file
-    const fs = require('fs');
     fs.writeFileSync(scriptPath, ffmpegCmd);
     fs.chmodSync(scriptPath, '755'); // Make it executable
     
@@ -355,7 +450,10 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     
     // Create a temporary script file with the FFmpeg normalization command
     const normScriptPath = `${scriptDir}/ffmpeg_normalize_${Date.now()}.sh`;
-    const normCmd = `${args.ffmpegPath} -i "${outputFilePath}" -bitexact -ac 1 -strict -2 -af "loudnorm=I=-24:LRA=7:TP=-2:measured_I=${loudnessInfo}:linear=true:print_format=summary,volume=0.90" -c:a ac3 "${normalizedOutputPath}"`;
+    
+    // Preserve the channel count for normalization
+    // For center channel, keep it mono; for stereo, preserve stereo
+    const normCmd = `${args.ffmpegPath} -i "${outputFilePath}" -bitexact -ac ${outputChannels} -strict -2 -af "loudnorm=I=-24:LRA=7:TP=-2:measured_I=${loudnessInfo}:linear=true:print_format=summary,volume=0.90" -c:a ${codec} -ar ${sampleRate} -b:a ${bitRate} "${normalizedOutputPath}"`;
     
     // Write the script file
     fs.writeFileSync(normScriptPath, normCmd);
