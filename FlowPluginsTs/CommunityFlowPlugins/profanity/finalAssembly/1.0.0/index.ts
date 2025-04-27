@@ -94,10 +94,10 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const copyVideoStream = args.inputs.copyVideoStream as boolean;
     const includeOriginalAudio = args.inputs.includeOriginalAudio as boolean;
 
-    // Get the original video file
-    // Make sure we're using the actual video file, not the SRT or audio file
-    let originalVideoPath = args.inputFileObj._id;
-    args.jobLog(`Original input file path: ${originalVideoPath}`);
+    // Get the original video file from originalLibraryFile
+    // This is the actual source file that was passed to the flow
+    let originalVideoPath = args.originalLibraryFile._id;
+    args.jobLog(`Original library file path: ${originalVideoPath}`);
     
     // Verify this is actually a video file
     if (!originalVideoPath ||
@@ -105,24 +105,37 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         originalVideoPath.endsWith('.ac3') ||
         originalVideoPath.endsWith('.aac') ||
         originalVideoPath.endsWith('.mp3')) {
-      args.jobLog(`Error: Input file is not a video file: ${originalVideoPath}`);
+      args.jobLog(`Error: Original library file is not a video file: ${originalVideoPath}`);
       
-      // Try to find the original video file in the variables
-      const workDir = path.dirname(originalVideoPath);
-      const possibleVideoPath = path.join(workDir, path.basename(workDir) + '.mkv');
-      args.jobLog(`Attempting to use video file: ${possibleVideoPath}`);
+      // Try to use the input file object as fallback
+      originalVideoPath = args.inputFileObj._id;
+      args.jobLog(`Trying input file object path: ${originalVideoPath}`);
       
-      if (fs.existsSync(possibleVideoPath)) {
-        args.jobLog(`Found video file: ${possibleVideoPath}`);
-        // Use this as the original video path
-        originalVideoPath = possibleVideoPath;
-      } else {
-        args.jobLog('No original video file found');
-        return {
-          outputFileObj: args.inputFileObj,
-          outputNumber: 2, // Failed
-          variables: args.variables,
-        };
+      // If that's still not a video file, try to find it in the working directory
+      if (!originalVideoPath ||
+          originalVideoPath.endsWith('.srt') ||
+          originalVideoPath.endsWith('.ac3') ||
+          originalVideoPath.endsWith('.aac') ||
+          originalVideoPath.endsWith('.mp3')) {
+        args.jobLog(`Error: Input file is not a video file: ${originalVideoPath}`);
+        
+        // Try to find the original video file in the variables
+        const workDir = path.dirname(originalVideoPath);
+        const possibleVideoPath = path.join(workDir, path.basename(workDir) + '.mkv');
+        args.jobLog(`Attempting to use video file: ${possibleVideoPath}`);
+        
+        if (fs.existsSync(possibleVideoPath)) {
+          args.jobLog(`Found video file: ${possibleVideoPath}`);
+          // Use this as the original video path
+          originalVideoPath = possibleVideoPath;
+        } else {
+          args.jobLog('No original video file found');
+          return {
+            outputFileObj: args.inputFileObj,
+            outputNumber: 2, // Failed
+            variables: args.variables,
+          };
+        }
       }
     }
 

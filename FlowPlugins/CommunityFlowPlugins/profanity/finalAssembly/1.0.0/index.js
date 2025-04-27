@@ -164,30 +164,41 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 outputContainer = args.inputs.outputContainer;
                 copyVideoStream = args.inputs.copyVideoStream;
                 includeOriginalAudio = args.inputs.includeOriginalAudio;
-                originalVideoPath = args.inputFileObj._id;
-                args.jobLog("Original input file path: ".concat(originalVideoPath));
+                originalVideoPath = args.originalLibraryFile._id;
+                args.jobLog("Original library file path: ".concat(originalVideoPath));
                 // Verify this is actually a video file
                 if (!originalVideoPath ||
                     originalVideoPath.endsWith('.srt') ||
                     originalVideoPath.endsWith('.ac3') ||
                     originalVideoPath.endsWith('.aac') ||
                     originalVideoPath.endsWith('.mp3')) {
-                    args.jobLog("Error: Input file is not a video file: ".concat(originalVideoPath));
-                    workDir = path.dirname(originalVideoPath);
-                    possibleVideoPath = path.join(workDir, path.basename(workDir) + '.mkv');
-                    args.jobLog("Attempting to use video file: ".concat(possibleVideoPath));
-                    if (fs.existsSync(possibleVideoPath)) {
-                        args.jobLog("Found video file: ".concat(possibleVideoPath));
-                        // Use this as the original video path
-                        originalVideoPath = possibleVideoPath;
-                    }
-                    else {
-                        args.jobLog('No original video file found');
-                        return [2 /*return*/, {
-                                outputFileObj: args.inputFileObj,
-                                outputNumber: 2,
-                                variables: args.variables,
-                            }];
+                    args.jobLog("Error: Original library file is not a video file: ".concat(originalVideoPath));
+                    // Try to use the input file object as fallback
+                    originalVideoPath = args.inputFileObj._id;
+                    args.jobLog("Trying input file object path: ".concat(originalVideoPath));
+                    // If that's still not a video file, try to find it in the working directory
+                    if (!originalVideoPath ||
+                        originalVideoPath.endsWith('.srt') ||
+                        originalVideoPath.endsWith('.ac3') ||
+                        originalVideoPath.endsWith('.aac') ||
+                        originalVideoPath.endsWith('.mp3')) {
+                        args.jobLog("Error: Input file is not a video file: ".concat(originalVideoPath));
+                        workDir = path.dirname(originalVideoPath);
+                        possibleVideoPath = path.join(workDir, path.basename(workDir) + '.mkv');
+                        args.jobLog("Attempting to use video file: ".concat(possibleVideoPath));
+                        if (fs.existsSync(possibleVideoPath)) {
+                            args.jobLog("Found video file: ".concat(possibleVideoPath));
+                            // Use this as the original video path
+                            originalVideoPath = possibleVideoPath;
+                        }
+                        else {
+                            args.jobLog('No original video file found');
+                            return [2 /*return*/, {
+                                    outputFileObj: args.inputFileObj,
+                                    outputNumber: 2,
+                                    variables: args.variables,
+                                }];
+                        }
                     }
                 }
                 processedAudioPath = (_b = (_a = args.variables) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.combinedAudioPath;
