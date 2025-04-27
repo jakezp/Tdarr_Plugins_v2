@@ -346,8 +346,9 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 if (!(_i < srtFiles_1.length)) return [3 /*break*/, 21];
                 srtFile = srtFiles_1[_i];
                 srtFileName = path.basename(srtFile);
-                newSrtFileName = "".concat(originalFileName).concat(srtFileName.includes('_redacted') ? '_redacted' : '', ".srt");
+                newSrtFileName = "".concat(originalFileName, ".srt");
                 newSrtPath = path.join(originalDir, newSrtFileName);
+                args.jobLog("Using original filename for SRT: ".concat(newSrtFileName));
                 args.jobLog("".concat(copyOrMoveSrts === 'copy' ? 'Copying' : 'Moving', " ").concat(srtFile, " to ").concat(newSrtPath));
                 _c.label = 17;
             case 17:

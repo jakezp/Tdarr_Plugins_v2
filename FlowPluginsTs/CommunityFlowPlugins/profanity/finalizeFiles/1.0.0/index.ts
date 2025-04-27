@@ -273,8 +273,11 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         const srtFileName = path.basename(srtFile);
         
         // Create a new file name based on the original file name
-        const newSrtFileName = `${originalFileName}${srtFileName.includes('_redacted') ? '_redacted' : ''}.srt`;
+        // Always use the original filename without any suffix
+        const newSrtFileName = `${originalFileName}.srt`;
         const newSrtPath = path.join(originalDir, newSrtFileName);
+        
+        args.jobLog(`Using original filename for SRT: ${newSrtFileName}`);
         
         args.jobLog(`${copyOrMoveSrts === 'copy' ? 'Copying' : 'Moving'} ${srtFile} to ${newSrtPath}`);
         

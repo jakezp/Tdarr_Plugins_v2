@@ -38,7 +38,7 @@ const profanityList = {
     'shitting', 'shitter', 'shitty', 'shits', 'shitfaced',
     'shithead', 'shitstain', 'shitshow', 'shitbag', 'bullshitter',
     'bullshit', 'horseshit', 'chickenshit', 'dipshit', 'dumbshit',
-    'goddamnit', 'goddamn', 'goddam', 'dammit', 'damnit'
+    'goddamnit', 'goddamn', 'goddam', 'dammit', 'damnit', 'vagina', 'penis'
   ]
 };
 
