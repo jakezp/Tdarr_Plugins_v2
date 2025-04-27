@@ -198,6 +198,37 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     // Process each stream
     let videoStreamIndex = 0;
     
+    // First pass: analyze streams to determine language for redacted audio
+    // We want to use the same language as the original audio if possible
+    let originalAudioLanguage = defaultLanguage;
+    let originalAudioFound = false;
+    
+    for (const stream of streamInfo.streams) {
+      if (stream.codec_type === 'audio' && stream.index > 0) {
+        // This is not the first audio stream, so it's likely the original
+        if (stream.tags?.language && stream.tags.language !== 'und') {
+          originalAudioLanguage = stream.tags.language;
+          originalAudioFound = true;
+          args.jobLog(`Found original audio language: ${originalAudioLanguage}`);
+          break;
+        }
+      }
+    }
+    
+    // If we didn't find an original audio stream with a language, try to get it from the first audio stream
+    if (!originalAudioFound) {
+      for (const stream of streamInfo.streams) {
+        if (stream.codec_type === 'audio') {
+          if (stream.tags?.language && stream.tags.language !== 'und') {
+            originalAudioLanguage = stream.tags.language;
+            args.jobLog(`Using first audio stream language: ${originalAudioLanguage}`);
+            break;
+          }
+        }
+      }
+    }
+    
+    // Second pass: update metadata for all streams
     streamInfo.streams.forEach((stream: any, index: number) => {
       if (stream.codec_type === 'video') {
         // Set language for video streams
@@ -212,20 +243,42 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       } else if (stream.codec_type === 'audio') {
         // Get codec and language
         const codec = stream.codec_name?.toUpperCase() || 'AC3';
-        const lang = stream.tags?.language || defaultLanguage;
+        
+        // For the first audio stream (redacted), use the language from the original audio
+        // For other streams, use their existing language or the default
+        let lang;
+        if (audioStreamIndex === 0) {
+          // First audio stream is the redacted one - use the original audio language
+          lang = originalAudioLanguage;
+          args.jobLog(`Setting redacted audio language to: ${lang}`);
+        } else {
+          // Other audio streams - use their existing language or default
+          lang = stream.tags?.language || defaultLanguage;
+        }
         
         // Set title based on whether it's the first audio stream (redacted) or not (original)
         let title;
+        let displayLang = lang.toUpperCase();
+        
+        // Map language codes to display names
+        if (lang === 'eng') displayLang = 'English';
+        else if (lang === 'fre' || lang === 'fra') displayLang = 'French';
+        else if (lang === 'ger' || lang === 'deu') displayLang = 'German';
+        else if (lang === 'spa') displayLang = 'Spanish';
+        else if (lang === 'ita') displayLang = 'Italian';
+        else if (lang === 'jpn') displayLang = 'Japanese';
+        else if (lang === 'chi' || lang === 'zho') displayLang = 'Chinese';
+        
         if (audioStreamIndex === 0) {
           // First audio stream is the redacted one
           title = redactedAudioTitle
             .replace('{CODEC}', codec)
-            .replace('{LANG}', lang.toUpperCase());
+            .replace('{LANG}', displayLang);
         } else {
           // Other audio streams are original
           title = originalAudioTitle
             .replace('{CODEC}', codec)
-            .replace('{LANG}', lang.toUpperCase());
+            .replace('{LANG}', displayLang);
         }
         
         // Add metadata arguments
@@ -244,8 +297,18 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         // Get language
         const lang = stream.tags?.language || defaultLanguage;
         
+        // Map language codes to display names
+        let displayLang = lang.toUpperCase();
+        if (lang === 'eng') displayLang = 'English';
+        else if (lang === 'fre' || lang === 'fra') displayLang = 'French';
+        else if (lang === 'ger' || lang === 'deu') displayLang = 'German';
+        else if (lang === 'spa') displayLang = 'Spanish';
+        else if (lang === 'ita') displayLang = 'Italian';
+        else if (lang === 'jpn') displayLang = 'Japanese';
+        else if (lang === 'chi' || lang === 'zho') displayLang = 'Chinese';
+        
         // Set title
-        const title = subtitleTitle.replace('{LANG}', lang.toUpperCase());
+        const title = subtitleTitle.replace('{LANG}', displayLang);
         
         // Add metadata arguments
         metadataArgs.push(`-metadata:s:s:${subtitleStreamIndex}`, `title=${title}`);

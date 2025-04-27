@@ -140,17 +140,18 @@ var details = function () { return ({
 exports.details = details;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, redactedAudioTitle_1, originalAudioTitle_1, subtitleTitle_1, defaultLanguage_1, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, fs_1, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, metadataArgs_1, audioStreamIndex_1, subtitleStreamIndex_1, videoStreamIndex_1, fileDir, fileName, fileExt, outputFilePath, ffmpegArgs, cli, res, fs, error_2, errorMessage;
-    return __generator(this, function (_a) {
-        switch (_a.label) {
+    var lib, redactedAudioTitle_1, originalAudioTitle_1, subtitleTitle_1, defaultLanguage_1, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, fs_1, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, metadataArgs_1, audioStreamIndex_1, subtitleStreamIndex_1, videoStreamIndex_1, originalAudioLanguage_1, originalAudioFound, _i, _a, stream, _b, _c, stream, fileDir, fileName, fileExt, outputFilePath, ffmpegArgs, cli, res, fs, error_2, errorMessage;
+    var _d, _e;
+    return __generator(this, function (_f) {
+        switch (_f.label) {
             case 0:
                 lib = require('../../../../../methods/lib')();
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
                 args.inputs = lib.loadDefaultValues(args.inputs, details);
                 args.jobLog('Starting update of stream tags and names');
-                _a.label = 1;
+                _f.label = 1;
             case 1:
-                _a.trys.push([1, 8, , 9]);
+                _f.trys.push([1, 8, , 9]);
                 redactedAudioTitle_1 = args.inputs.redactedAudioTitle;
                 originalAudioTitle_1 = args.inputs.originalAudioTitle;
                 subtitleTitle_1 = args.inputs.subtitleTitle;
@@ -184,7 +185,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 });
                 return [4 /*yield*/, ffprobeCli.runCli()];
             case 2:
-                ffprobeResult = _a.sent();
+                ffprobeResult = _f.sent();
                 if (ffprobeResult.cliExitCode !== 0) {
                     args.jobLog('Failed to get stream info with ffprobe');
                     return [2 /*return*/, {
@@ -194,9 +195,9 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         }];
                 }
                 streamInfo = void 0;
-                _a.label = 3;
+                _f.label = 3;
             case 3:
-                _a.trys.push([3, 5, , 6]);
+                _f.trys.push([3, 5, , 6]);
                 fs_1 = require('fs');
                 tempOutputPath = "".concat(path.dirname(filePath), "/ffprobe_output_").concat(Date.now(), ".json");
                 ffprobeFileCmd = [
@@ -219,7 +220,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 });
                 return [4 /*yield*/, ffprobeFileCli.runCli()];
             case 4:
-                _a.sent();
+                _f.sent();
                 // Read the output file
                 if (fs_1.existsSync(tempOutputPath)) {
                     stdoutContent = fs_1.readFileSync(tempOutputPath, 'utf8');
@@ -232,7 +233,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 }
                 return [3 /*break*/, 6];
             case 5:
-                error_1 = _a.sent();
+                error_1 = _f.sent();
                 args.jobLog("Error parsing ffprobe output: ".concat(error_1));
                 return [2 /*return*/, {
                         outputFileObj: args.inputFileObj,
@@ -252,6 +253,34 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 audioStreamIndex_1 = 0;
                 subtitleStreamIndex_1 = 0;
                 videoStreamIndex_1 = 0;
+                originalAudioLanguage_1 = defaultLanguage_1;
+                originalAudioFound = false;
+                for (_i = 0, _a = streamInfo.streams; _i < _a.length; _i++) {
+                    stream = _a[_i];
+                    if (stream.codec_type === 'audio' && stream.index > 0) {
+                        // This is not the first audio stream, so it's likely the original
+                        if (((_d = stream.tags) === null || _d === void 0 ? void 0 : _d.language) && stream.tags.language !== 'und') {
+                            originalAudioLanguage_1 = stream.tags.language;
+                            originalAudioFound = true;
+                            args.jobLog("Found original audio language: ".concat(originalAudioLanguage_1));
+                            break;
+                        }
+                    }
+                }
+                // If we didn't find an original audio stream with a language, try to get it from the first audio stream
+                if (!originalAudioFound) {
+                    for (_b = 0, _c = streamInfo.streams; _b < _c.length; _b++) {
+                        stream = _c[_b];
+                        if (stream.codec_type === 'audio') {
+                            if (((_e = stream.tags) === null || _e === void 0 ? void 0 : _e.language) && stream.tags.language !== 'und') {
+                                originalAudioLanguage_1 = stream.tags.language;
+                                args.jobLog("Using first audio stream language: ".concat(originalAudioLanguage_1));
+                                break;
+                            }
+                        }
+                    }
+                }
+                // Second pass: update metadata for all streams
                 streamInfo.streams.forEach(function (stream, index) {
                     var _a, _b, _c, _d;
                     if (stream.codec_type === 'video') {
@@ -266,20 +295,47 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     else if (stream.codec_type === 'audio') {
                         // Get codec and language
                         var codec = ((_b = stream.codec_name) === null || _b === void 0 ? void 0 : _b.toUpperCase()) || 'AC3';
-                        var lang = ((_c = stream.tags) === null || _c === void 0 ? void 0 : _c.language) || defaultLanguage_1;
+                        // For the first audio stream (redacted), use the language from the original audio
+                        // For other streams, use their existing language or the default
+                        var lang = void 0;
+                        if (audioStreamIndex_1 === 0) {
+                            // First audio stream is the redacted one - use the original audio language
+                            lang = originalAudioLanguage_1;
+                            args.jobLog("Setting redacted audio language to: ".concat(lang));
+                        }
+                        else {
+                            // Other audio streams - use their existing language or default
+                            lang = ((_c = stream.tags) === null || _c === void 0 ? void 0 : _c.language) || defaultLanguage_1;
+                        }
                         // Set title based on whether it's the first audio stream (redacted) or not (original)
                         var title = void 0;
+                        var displayLang = lang.toUpperCase();
+                        // Map language codes to display names
+                        if (lang === 'eng')
+                            displayLang = 'English';
+                        else if (lang === 'fre' || lang === 'fra')
+                            displayLang = 'French';
+                        else if (lang === 'ger' || lang === 'deu')
+                            displayLang = 'German';
+                        else if (lang === 'spa')
+                            displayLang = 'Spanish';
+                        else if (lang === 'ita')
+                            displayLang = 'Italian';
+                        else if (lang === 'jpn')
+                            displayLang = 'Japanese';
+                        else if (lang === 'chi' || lang === 'zho')
+                            displayLang = 'Chinese';
                         if (audioStreamIndex_1 === 0) {
                             // First audio stream is the redacted one
                             title = redactedAudioTitle_1
                                 .replace('{CODEC}', codec)
-                                .replace('{LANG}', lang.toUpperCase());
+                                .replace('{LANG}', displayLang);
                         }
                         else {
                             // Other audio streams are original
                             title = originalAudioTitle_1
                                 .replace('{CODEC}', codec)
-                                .replace('{LANG}', lang.toUpperCase());
+                                .replace('{LANG}', displayLang);
                         }
                         // Add metadata arguments
                         metadataArgs_1.push("-metadata:s:a:".concat(audioStreamIndex_1), "title=".concat(title));
@@ -296,8 +352,24 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     else if (stream.codec_type === 'subtitle') {
                         // Get language
                         var lang = ((_d = stream.tags) === null || _d === void 0 ? void 0 : _d.language) || defaultLanguage_1;
+                        // Map language codes to display names
+                        var displayLang = lang.toUpperCase();
+                        if (lang === 'eng')
+                            displayLang = 'English';
+                        else if (lang === 'fre' || lang === 'fra')
+                            displayLang = 'French';
+                        else if (lang === 'ger' || lang === 'deu')
+                            displayLang = 'German';
+                        else if (lang === 'spa')
+                            displayLang = 'Spanish';
+                        else if (lang === 'ita')
+                            displayLang = 'Italian';
+                        else if (lang === 'jpn')
+                            displayLang = 'Japanese';
+                        else if (lang === 'chi' || lang === 'zho')
+                            displayLang = 'Chinese';
                         // Set title
-                        var title = subtitleTitle_1.replace('{LANG}', lang.toUpperCase());
+                        var title = subtitleTitle_1.replace('{LANG}', displayLang);
                         // Add metadata arguments
                         metadataArgs_1.push("-metadata:s:s:".concat(subtitleStreamIndex_1), "title=".concat(title));
                         metadataArgs_1.push("-metadata:s:s:".concat(subtitleStreamIndex_1), "language=".concat(lang));
@@ -331,7 +403,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 });
                 return [4 /*yield*/, cli.runCli()];
             case 7:
-                res = _a.sent();
+                res = _f.sent();
                 if (res.cliExitCode !== 0) {
                     args.jobLog('FFmpeg stream tag update failed');
                     return [2 /*return*/, {
@@ -352,7 +424,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         variables: args.variables,
                     }];
             case 8:
-                error_2 = _a.sent();
+                error_2 = _f.sent();
                 errorMessage = error_2 instanceof Error ? error_2.message : 'Unknown error';
                 args.jobLog("Error in updating stream tags: ".concat(errorMessage));
                 return [2 /*return*/, {
