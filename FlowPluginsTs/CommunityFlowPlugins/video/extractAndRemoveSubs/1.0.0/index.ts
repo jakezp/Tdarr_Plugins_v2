@@ -52,10 +52,6 @@ const details = ():IpluginDetails => ({
       number: 2,
       tooltip: 'No subtitles found in file',
     },
-    {
-      number: 3,
-      tooltip: 'Error occurred during processing',
-    },
   ],
 });
 
@@ -176,14 +172,8 @@ const plugin = async (args:IpluginInputArgs):Promise<IpluginOutputArgs> => {
   } catch (err) {
     const error = err as Error;
     args.jobLog(`Error in Extract and Remove Subtitles plugin: ${error.message}`);
-    return {
-      outputFileObj: args.inputFileObj,
-      outputNumber: 3, // Error
-      variables: {
-        ...args.variables,
-        flowFailed: true,
-      },
-    };
+    // Flow plugins have a built-in error handling mechanism
+    throw error;
   }
 };
 

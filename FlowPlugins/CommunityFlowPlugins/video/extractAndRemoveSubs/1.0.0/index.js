@@ -118,10 +118,6 @@ var details = function () { return ({
             number: 2,
             tooltip: 'No subtitles found in file',
         },
-        {
-            number: 3,
-            tooltip: 'Error occurred during processing',
-        },
     ],
 }); };
 exports.details = details;
@@ -226,11 +222,8 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 err_1 = _c.sent();
                 error = err_1;
                 args.jobLog("Error in Extract and Remove Subtitles plugin: ".concat(error.message));
-                return [2 /*return*/, {
-                        outputFileObj: args.inputFileObj,
-                        outputNumber: 3,
-                        variables: __assign(__assign({}, args.variables), { flowFailed: true }),
-                    }];
+                // Flow plugins have a built-in error handling mechanism
+                throw error;
             case 7: return [2 /*return*/];
         }
     });
