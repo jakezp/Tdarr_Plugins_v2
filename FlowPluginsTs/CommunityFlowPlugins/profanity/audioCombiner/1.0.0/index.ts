@@ -201,69 +201,70 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const audioDir = path.dirname(originalAudioPath);
     const fileName = getFileName(originalAudioPath);
     let fileExt = path.extname(originalAudioPath);
-    
+
     if (outputFormat !== 'same') {
       fileExt = `.${outputFormat}`;
     }
-    
+
     const outputFilePath = `${audioDir}/${fileName}_combined${fileExt}`;
 
     // Create a temporary script file with the FFmpeg command
     const scriptDir = audioDir;
     const scriptPath = `${scriptDir}/ffmpeg_combine_${Date.now()}.sh`;
-    
-    // Build the FFmpeg command to replace the center channel
-    // We'll use the channelmap filter to extract all channels from the original audio
-    // Then replace the center channel with the redacted one and recombine
-    
-    // Use a more robust approach with pan filter instead of channelsplit
-    // This avoids the "unconnected output" error by not creating unused outputs
+
+    // Build the FFmpeg command to replace the center channel using channelsplit + anullsink + join
     let filterComplex = '';
-    
+
     // Log the exact channel layout for debugging
     args.jobLog(`Creating filter complex for channel layout: "${channelLayout}"`);
-    
+
     if (channelLayout === '5.1') {
-      // For standard 5.1:
-      // 1. Zero out the center channel from original audio
-      // 2. Format the redacted center channel as mono
-      // 3. Merge them and map to proper 5.1 channels
-      filterComplex = `[0:a]pan=5.1|FL=FL|FR=FR|FC=0|LFE=LFE|BL=BL|BR=BR[no_center];` +
-                      `[1:a]aformat=channel_layouts=mono[redacted_center];` +
-                      `[no_center][redacted_center]amerge=inputs=2,pan=5.1|FL=FL-0|FR=FR-0|FC=FC-1|LFE=LFE-0|BL=BL-0|BR=BR-0[out]`;
+      // For standard 5.1 with back channels
+      filterComplex = `
+    [0:a]channelsplit=channel_layout=5.1[FL][FR][FC][LFE][BL][BR];
+    [FC]anullsink;
+    [1:a]aformat=channel_layouts=mono[redacted_center];
+    [FL][FR][redacted_center][LFE][BL][BR]join=inputs=6:channel_layout=5.1[out]
+    `.trim();
     } else if (channelLayout === '5.1(side)') {
-      // For 5.1(side) layout:
-      // Same approach but with side channels (SL/SR) instead of back channels (BL/BR)
-      filterComplex = `[0:a]pan=5.1(side)|FL=FL|FR=FR|FC=0|LFE=LFE|SL=SL|SR=SR[no_center];` +
-                      `[1:a]aformat=channel_layouts=mono[redacted_center];` +
-                      `[no_center][redacted_center]amerge=inputs=2,pan=5.1(side)|FL=FL-0|FR=FR-0|FC=FC-1|LFE=LFE-0|SL=SL-0|SR=SR-0[out]`;
+      // For 5.1(side) layout (side channels SL/SR)
+      filterComplex = `
+    [0:a]channelsplit=channel_layout=5.1(side)[FL][FR][FC][LFE][SL][SR];
+    [FC]anullsink;
+    [1:a]aformat=channel_layouts=mono[redacted_center];
+    [FL][FR][redacted_center][LFE][SL][SR]join=inputs=6:channel_layout=5.1(side)[out]
+    `.trim();
     } else if (channelLayout === '7.1') {
-      // For 7.1 layout:
-      // Same approach but with all 8 channels
-      filterComplex = `[0:a]pan=7.1|FL=FL|FR=FR|FC=0|LFE=LFE|BL=BL|BR=BR|SL=SL|SR=SR[no_center];` +
-                      `[1:a]aformat=channel_layouts=mono[redacted_center];` +
-                      `[no_center][redacted_center]amerge=inputs=2,pan=7.1|FL=FL-0|FR=FR-0|FC=FC-1|LFE=LFE-0|BL=BL-0|BR=BR-0|SL=SL-0|SR=SR-0[out]`;
+      // For 7.1 layout (8 channels)
+      filterComplex = `
+    [0:a]channelsplit=channel_layout=7.1[FL][FR][FC][LFE][BL][BR][SL][SR];
+    [FC]anullsink;
+    [1:a]aformat=channel_layouts=mono[redacted_center];
+    [FL][FR][redacted_center][LFE][BL][BR][SL][SR]join=inputs=8:channel_layout=7.1[out]
+    `.trim();
     } else {
-      // For unknown layouts, try a generic approach that should work for most surround formats
-      args.jobLog(`Warning: Using generic approach for unknown channel layout: ${channelLayout}`);
-      
-      // Use a simpler approach that should work for most surround formats
-      filterComplex = `[0:a]pan=5.1|FL=FL|FR=FR|FC=0|LFE=LFE|BL=BL|BR=BR[no_center];` +
-                      `[1:a]aformat=channel_layouts=mono[redacted_center];` +
-                      `[no_center][redacted_center]amerge=inputs=2,pan=5.1|FL=FL-0|FR=FR-0|FC=FC-1|LFE=LFE-0|BL=BL-0|BR=BR-0[out]`;
+      // For unknown layouts, default to 5.1
+      args.jobLog(`Warning: Using fallback for unknown channel layout: ${channelLayout}`);
+      filterComplex = `
+    [0:a]channelsplit=channel_layout=5.1[FL][FR][FC][LFE][BL][BR];
+    [FC]anullsink;
+    [1:a]aformat=channel_layouts=mono[redacted_center];
+    [FL][FR][redacted_center][LFE][BL][BR]join=inputs=6:channel_layout=5.1[out]
+    `.trim();
     }
-    
+
     args.jobLog(`Generated filter complex: ${filterComplex}`);
-    
-    // Build the complete FFmpeg command with quality parameters
+
+    // Build the complete FFmpeg command
     const ffmpegCmd = `${args.ffmpegPath} -y -i "${originalAudioPath}" -i "${redactedCenterPath}" -filter_complex "${filterComplex}" -map "[out]" -c:a ${codec} -ar ${sampleRate} -b:a ${bitRate} "${outputFilePath}"`;
-    
+
     // Write the script file
     fs.writeFileSync(scriptPath, ffmpegCmd);
     fs.chmodSync(scriptPath, '755'); // Make it executable
-    
+
     args.jobLog(`Created FFmpeg combine script: ${scriptPath}`);
     args.jobLog(`FFmpeg command: ${ffmpegCmd}`);
+
     
     // Execute the script
     const ffmpegArgs = [
