@@ -22,14 +22,14 @@ const details = (): IpluginDetails => ({
   icon: 'faVolumeHigh',
   inputs: [
     {
-      label: 'Bitrate (kbps)',
-      name: 'bitrate',
+      label: 'Maximum Bitrate (kbps)',
+      name: 'maxBitrate',
       type: 'string',
-      defaultValue: '448',
+      defaultValue: '640',
       inputUI: {
         type: 'text',
       },
-      tooltip: 'Bitrate for AC3 audio in kbps (e.g., 448 for 5.1, 192 for stereo)',
+      tooltip: 'Maximum bitrate for AC3 audio in kbps (will use original bitrate if lower)',
     },
     {
       label: 'Preserve Original Audio',
@@ -59,15 +59,7 @@ const details = (): IpluginDetails => ({
   outputs: [
     {
       number: 1,
-      tooltip: 'Audio conversion successful',
-    },
-    {
-      number: 2,
-      tooltip: 'Audio conversion failed',
-    },
-    {
-      number: 3,
-      tooltip: 'No audio streams to convert',
+      tooltip: 'Success (audio conversion completed or no conversion needed)',
     },
   ],
 });
@@ -82,7 +74,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
 
   try {
     // Get the inputs
-    const bitrate = args.inputs.bitrate as string;
+    const maxBitrate = parseInt(args.inputs.maxBitrate as string, 10);
     const preserveOriginal = args.inputs.preserveOriginal === 'true';
     const defaultLanguage = args.inputs.defaultLanguage as string;
 
@@ -90,11 +82,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const filePath = args.inputFileObj._id;
     if (!filePath) {
       args.jobLog('No input file found');
-      return {
-        outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Failed
-        variables: args.variables,
-      };
+      throw new Error('No input file found');
     }
 
     args.jobLog(`Processing file: ${filePath}`);
@@ -123,11 +111,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const ffprobeResult = await ffprobeCli.runCli();
     if (ffprobeResult.cliExitCode !== 0) {
       args.jobLog('Failed to get stream info with ffprobe');
-      return {
-        outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Failed
-        variables: args.variables,
-      };
+      throw new Error('Failed to get stream info with ffprobe');
     }
 
     // Parse the ffprobe output
@@ -180,21 +164,17 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
 
     if (!streamInfo || !streamInfo.streams) {
       args.jobLog('No stream info found');
-      return {
-        outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Failed
-        variables: args.variables,
-      };
+      throw new Error('No stream info found');
     }
 
     // Find audio streams
     const audioStreams = streamInfo.streams.filter((stream: any) => stream.codec_type === 'audio');
     
     if (audioStreams.length === 0) {
-      args.jobLog('No audio streams found');
+      args.jobLog('No audio streams found, nothing to convert');
       return {
         outputFileObj: args.inputFileObj,
-        outputNumber: 3, // No audio streams to convert
+        outputNumber: 1, // Success (nothing to do)
         variables: args.variables,
       };
     }
@@ -244,17 +224,45 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         
         // Determine output channels and bitrate
         let outputChannels = stream.channels;
-        let outputBitrate = parseInt(bitrate, 10);
+        
+        // Calculate appropriate bitrate based on original stream
+        let originalBitrate = 0;
+        if (stream.bit_rate) {
+          originalBitrate = Math.ceil(parseInt(stream.bit_rate, 10) / 1000);
+          args.jobLog(`Original bitrate: ${originalBitrate}k`);
+        } else {
+          // Estimate bitrate based on codec and channels if not available
+          if (stream.codec_name === 'truehd' || stream.codec_name === 'dts') {
+            originalBitrate = stream.channels * 128; // Rough estimate
+          } else if (stream.codec_name === 'eac3') {
+            originalBitrate = stream.channels * 96;
+          } else if (stream.codec_name === 'aac') {
+            originalBitrate = stream.channels * 64;
+          } else {
+            originalBitrate = stream.channels * 80; // Default estimate
+          }
+          args.jobLog(`Estimated original bitrate: ${originalBitrate}k (based on codec and channels)`);
+        }
         
         // Downmix if more than 6 channels
         if (outputChannels > 6) {
           outputChannels = 6; // 5.1
           args.jobLog(`Downmixing from ${stream.channels} to 5.1 channels`);
-        } else if (outputChannels <= 2) {
-          // Use lower bitrate for stereo
-          outputBitrate = Math.min(outputBitrate, 192);
-          args.jobLog(`Using ${outputBitrate}k bitrate for stereo audio`);
         }
+        
+        // Determine appropriate bitrate for AC3
+        let outputBitrate;
+        if (outputChannels <= 2) {
+          // For stereo, cap at 192k but don't exceed original
+          outputBitrate = Math.min(originalBitrate, 192);
+        } else if (outputChannels <= 6) {
+          // For 5.1, cap at maxBitrate but don't exceed original
+          outputBitrate = Math.min(originalBitrate, maxBitrate);
+          // Ensure minimum quality for 5.1
+          outputBitrate = Math.max(outputBitrate, 384);
+        }
+        
+        args.jobLog(`Using ${outputBitrate}k bitrate for ${outputChannels} channels`);
         
         // Add conversion options
         ffmpegArgs.push(`-c:a:${index}`, 'ac3');
@@ -303,11 +311,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
 
     if (res.cliExitCode !== 0) {
       args.jobLog('FFmpeg audio conversion failed');
-      return {
-        outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Failed
-        variables: args.variables,
-      };
+      throw new Error('FFmpeg audio conversion failed');
     }
 
     args.jobLog(`Audio conversion successful: ${outputFilePath}`);
@@ -322,11 +326,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     args.jobLog(`Error in audio conversion: ${errorMessage}`);
-    return {
-      outputFileObj: args.inputFileObj,
-      outputNumber: 2, // Failed
-      variables: args.variables,
-    };
+    throw error; // Let Tdarr handle the error
   }
 };
 

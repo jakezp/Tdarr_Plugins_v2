@@ -78,14 +78,14 @@ var details = function () { return ({
     icon: 'faVolumeHigh',
     inputs: [
         {
-            label: 'Bitrate (kbps)',
-            name: 'bitrate',
+            label: 'Maximum Bitrate (kbps)',
+            name: 'maxBitrate',
             type: 'string',
-            defaultValue: '448',
+            defaultValue: '640',
             inputUI: {
                 type: 'text',
             },
-            tooltip: 'Bitrate for AC3 audio in kbps (e.g., 448 for 5.1, 192 for stereo)',
+            tooltip: 'Maximum bitrate for AC3 audio in kbps (will use original bitrate if lower)',
         },
         {
             label: 'Preserve Original Audio',
@@ -115,22 +115,14 @@ var details = function () { return ({
     outputs: [
         {
             number: 1,
-            tooltip: 'Audio conversion successful',
-        },
-        {
-            number: 2,
-            tooltip: 'Audio conversion failed',
-        },
-        {
-            number: 3,
-            tooltip: 'No audio streams to convert',
+            tooltip: 'Success (audio conversion completed or no conversion needed)',
         },
     ],
 }); };
 exports.details = details;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, bitrate_1, preserveOriginal_1, defaultLanguage_1, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, audioStreams, streamsToConvert, fileDir, fileName, fileExt, outputFilePath, ffmpegArgs_1, cli, res, error_2, errorMessage;
+    var lib, maxBitrate_1, preserveOriginal_1, defaultLanguage_1, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, audioStreams, streamsToConvert, fileDir, fileName, fileExt, outputFilePath, ffmpegArgs_1, cli, res, error_2, errorMessage;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -141,17 +133,13 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 8, , 9]);
-                bitrate_1 = args.inputs.bitrate;
+                maxBitrate_1 = parseInt(args.inputs.maxBitrate, 10);
                 preserveOriginal_1 = args.inputs.preserveOriginal === 'true';
                 defaultLanguage_1 = args.inputs.defaultLanguage;
                 filePath = args.inputFileObj._id;
                 if (!filePath) {
                     args.jobLog('No input file found');
-                    return [2 /*return*/, {
-                            outputFileObj: args.inputFileObj,
-                            outputNumber: 2,
-                            variables: args.variables,
-                        }];
+                    throw new Error('No input file found');
                 }
                 args.jobLog("Processing file: ".concat(filePath));
                 ffprobeCmd = [
@@ -177,11 +165,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 ffprobeResult = _a.sent();
                 if (ffprobeResult.cliExitCode !== 0) {
                     args.jobLog('Failed to get stream info with ffprobe');
-                    return [2 /*return*/, {
-                            outputFileObj: args.inputFileObj,
-                            outputNumber: 2,
-                            variables: args.variables,
-                        }];
+                    throw new Error('Failed to get stream info with ffprobe');
                 }
                 streamInfo = void 0;
                 _a.label = 3;
@@ -231,18 +215,14 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
             case 6:
                 if (!streamInfo || !streamInfo.streams) {
                     args.jobLog('No stream info found');
-                    return [2 /*return*/, {
-                            outputFileObj: args.inputFileObj,
-                            outputNumber: 2,
-                            variables: args.variables,
-                        }];
+                    throw new Error('No stream info found');
                 }
                 audioStreams = streamInfo.streams.filter(function (stream) { return stream.codec_type === 'audio'; });
                 if (audioStreams.length === 0) {
-                    args.jobLog('No audio streams found');
+                    args.jobLog('No audio streams found, nothing to convert');
                     return [2 /*return*/, {
                             outputFileObj: args.inputFileObj,
-                            outputNumber: 3,
+                            outputNumber: 1,
                             variables: args.variables,
                         }];
                 }
@@ -281,17 +261,46 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         args.jobLog("Converting stream ".concat(streamIndex, " (").concat(stream.codec_name, ", ").concat(stream.channels, " channels)"));
                         // Determine output channels and bitrate
                         var outputChannels = stream.channels;
-                        var outputBitrate = parseInt(bitrate_1, 10);
+                        // Calculate appropriate bitrate based on original stream
+                        var originalBitrate = 0;
+                        if (stream.bit_rate) {
+                            originalBitrate = Math.ceil(parseInt(stream.bit_rate, 10) / 1000);
+                            args.jobLog("Original bitrate: ".concat(originalBitrate, "k"));
+                        }
+                        else {
+                            // Estimate bitrate based on codec and channels if not available
+                            if (stream.codec_name === 'truehd' || stream.codec_name === 'dts') {
+                                originalBitrate = stream.channels * 128; // Rough estimate
+                            }
+                            else if (stream.codec_name === 'eac3') {
+                                originalBitrate = stream.channels * 96;
+                            }
+                            else if (stream.codec_name === 'aac') {
+                                originalBitrate = stream.channels * 64;
+                            }
+                            else {
+                                originalBitrate = stream.channels * 80; // Default estimate
+                            }
+                            args.jobLog("Estimated original bitrate: ".concat(originalBitrate, "k (based on codec and channels)"));
+                        }
                         // Downmix if more than 6 channels
                         if (outputChannels > 6) {
                             outputChannels = 6; // 5.1
                             args.jobLog("Downmixing from ".concat(stream.channels, " to 5.1 channels"));
                         }
-                        else if (outputChannels <= 2) {
-                            // Use lower bitrate for stereo
-                            outputBitrate = Math.min(outputBitrate, 192);
-                            args.jobLog("Using ".concat(outputBitrate, "k bitrate for stereo audio"));
+                        // Determine appropriate bitrate for AC3
+                        var outputBitrate = void 0;
+                        if (outputChannels <= 2) {
+                            // For stereo, cap at 192k but don't exceed original
+                            outputBitrate = Math.min(originalBitrate, 192);
                         }
+                        else if (outputChannels <= 6) {
+                            // For 5.1, cap at maxBitrate but don't exceed original
+                            outputBitrate = Math.min(originalBitrate, maxBitrate_1);
+                            // Ensure minimum quality for 5.1
+                            outputBitrate = Math.max(outputBitrate, 384);
+                        }
+                        args.jobLog("Using ".concat(outputBitrate, "k bitrate for ").concat(outputChannels, " channels"));
                         // Add conversion options
                         ffmpegArgs_1.push("-c:a:".concat(index), 'ac3');
                         ffmpegArgs_1.push("-b:a:".concat(index), "".concat(outputBitrate, "k"));
@@ -335,11 +344,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 res = _a.sent();
                 if (res.cliExitCode !== 0) {
                     args.jobLog('FFmpeg audio conversion failed');
-                    return [2 /*return*/, {
-                            outputFileObj: args.inputFileObj,
-                            outputNumber: 2,
-                            variables: args.variables,
-                        }];
+                    throw new Error('FFmpeg audio conversion failed');
                 }
                 args.jobLog("Audio conversion successful: ".concat(outputFilePath));
                 return [2 /*return*/, {
@@ -353,11 +358,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 error_2 = _a.sent();
                 errorMessage = error_2 instanceof Error ? error_2.message : 'Unknown error';
                 args.jobLog("Error in audio conversion: ".concat(errorMessage));
-                return [2 /*return*/, {
-                        outputFileObj: args.inputFileObj,
-                        outputNumber: 2,
-                        variables: args.variables,
-                    }];
+                throw error_2; // Let Tdarr handle the error
             case 9: return [2 /*return*/];
         }
     });
