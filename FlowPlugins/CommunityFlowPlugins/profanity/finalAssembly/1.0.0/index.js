@@ -148,18 +148,18 @@ var details = function () { return ({
 exports.details = details;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, outputFilePath, outputContainer, copyVideoStream, includeOriginalAudio, originalVideoPath, processedAudioPath, originalAudioPath, originalDir, originalName, finalExt, scriptDir, scriptPath, ffmpegCmd, ffmpegArgs, cli, res, error_1, errorMessage;
-    var _a, _b, _c, _d, _e, _f;
-    return __generator(this, function (_g) {
-        switch (_g.label) {
+    var lib, outputFilePath, outputContainer, copyVideoStream, includeOriginalAudio, originalVideoPath, processedAudioPath, originalDir, originalName, finalExt, scriptDir, scriptPath, ffmpegCmd, ffmpegArgs, cli, res, error_1, errorMessage;
+    var _a, _b, _c, _d;
+    return __generator(this, function (_e) {
+        switch (_e.label) {
             case 0:
                 lib = require('../../../../../methods/lib')();
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
                 args.inputs = lib.loadDefaultValues(args.inputs, details);
                 args.jobLog('Starting final assembly of video with redacted audio and subtitles');
-                _g.label = 1;
+                _e.label = 1;
             case 1:
-                _g.trys.push([1, 3, , 4]);
+                _e.trys.push([1, 3, , 4]);
                 outputFilePath = args.inputs.outputFilePath;
                 outputContainer = args.inputs.outputContainer;
                 copyVideoStream = args.inputs.copyVideoStream;
@@ -191,12 +191,9 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 else {
                     args.jobLog("Using combined audio path for 5.1 file: ".concat(processedAudioPath));
                 }
-                originalAudioPath = (_f = (_e = args.variables) === null || _e === void 0 ? void 0 : _e.user) === null || _f === void 0 ? void 0 : _f.extractedAudioPath;
-                if (!originalAudioPath && includeOriginalAudio) {
-                    args.jobLog('No original audio file found, continuing without original audio');
-                }
                 // Note: We don't embed subtitles as per user's request
                 // The subtitle file will be kept separate alongside the media file
+                // We don't need to get the original audio file separately since it's already in the original video container
                 // Determine the output file path and container
                 if (!outputFilePath) {
                     originalDir = path.dirname(originalVideoPath);
@@ -210,12 +207,8 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 scriptDir = path.dirname(originalVideoPath);
                 scriptPath = "".concat(scriptDir, "/ffmpeg_assembly_").concat(Date.now(), ".sh");
                 ffmpegCmd = "".concat(args.ffmpegPath, " -y");
-                // Add input files
+                // Add input files - original video and processed audio
                 ffmpegCmd += " -i \"".concat(originalVideoPath, "\" -i \"").concat(processedAudioPath, "\"");
-                // Add original audio input if available and requested
-                if (originalAudioPath && includeOriginalAudio) {
-                    ffmpegCmd += " -i \"".concat(originalAudioPath, "\"");
-                }
                 // Add mapping options
                 if (copyVideoStream) {
                     ffmpegCmd += ' -map 0:v:0 -c:v copy'; // Copy video stream
@@ -223,12 +216,21 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 else {
                     ffmpegCmd += ' -map 0:v:0'; // Map video stream but don't specify codec (use default)
                 }
-                // Map redacted audio stream and set it as default
-                ffmpegCmd += ' -map 1:a:0 -c:a copy -disposition:a:0 default';
-                // Map original audio stream if available and requested
-                if (originalAudioPath && includeOriginalAudio) {
-                    ffmpegCmd += ' -map 2:a:0 -c:a copy -disposition:a:1 none';
+                // Map video stream from original video
+                if (copyVideoStream) {
+                    ffmpegCmd += ' -map 0:v -c:v copy'; // Copy all video streams
                 }
+                else {
+                    ffmpegCmd += ' -map 0:v'; // Map all video streams but don't specify codec
+                }
+                // Map redacted audio stream and set it as default
+                ffmpegCmd += ' -map 1:a -c:a copy -disposition:a:0 default';
+                // Map original audio streams from original video if requested
+                if (includeOriginalAudio) {
+                    ffmpegCmd += ' -map 0:a -c:a copy -disposition:a:1 none';
+                }
+                // Map any subtitle streams from original video (but don't embed SRT file)
+                ffmpegCmd += ' -map 0:s? -c:s copy';
                 // Add output file
                 ffmpegCmd += " \"".concat(outputFilePath, "\"");
                 // Write the script file
@@ -252,7 +254,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 });
                 return [4 /*yield*/, cli.runCli()];
             case 2:
-                res = _g.sent();
+                res = _e.sent();
                 // Clean up the script file
                 try {
                     fs.unlinkSync(scriptPath);
@@ -279,7 +281,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         variables: args.variables,
                     }];
             case 3:
-                error_1 = _g.sent();
+                error_1 = _e.sent();
                 errorMessage = error_1 instanceof Error ? error_1.message : 'Unknown error';
                 args.jobLog("Error in final assembly: ".concat(errorMessage));
                 return [2 /*return*/, {

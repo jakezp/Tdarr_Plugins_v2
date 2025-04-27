@@ -127,14 +127,10 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       args.jobLog(`Using combined audio path for 5.1 file: ${processedAudioPath}`);
     }
 
-    // Get the original audio file (optional)
-    const originalAudioPath = args.variables?.user?.extractedAudioPath;
-    if (!originalAudioPath && includeOriginalAudio) {
-      args.jobLog('No original audio file found, continuing without original audio');
-    }
-    
     // Note: We don't embed subtitles as per user's request
     // The subtitle file will be kept separate alongside the media file
+    
+    // We don't need to get the original audio file separately since it's already in the original video container
 
     // Determine the output file path and container
     if (!outputFilePath) {
@@ -156,13 +152,8 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     // Build the FFmpeg command
     let ffmpegCmd = `${args.ffmpegPath} -y`;
     
-    // Add input files
+    // Add input files - original video and processed audio
     ffmpegCmd += ` -i "${originalVideoPath}" -i "${processedAudioPath}"`;
-    
-    // Add original audio input if available and requested
-    if (originalAudioPath && includeOriginalAudio) {
-      ffmpegCmd += ` -i "${originalAudioPath}"`;
-    }
     
     // Add mapping options
     if (copyVideoStream) {
@@ -171,13 +162,23 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       ffmpegCmd += ' -map 0:v:0'; // Map video stream but don't specify codec (use default)
     }
     
-    // Map redacted audio stream and set it as default
-    ffmpegCmd += ' -map 1:a:0 -c:a copy -disposition:a:0 default';
-    
-    // Map original audio stream if available and requested
-    if (originalAudioPath && includeOriginalAudio) {
-      ffmpegCmd += ' -map 2:a:0 -c:a copy -disposition:a:1 none';
+    // Map video stream from original video
+    if (copyVideoStream) {
+      ffmpegCmd += ' -map 0:v -c:v copy'; // Copy all video streams
+    } else {
+      ffmpegCmd += ' -map 0:v'; // Map all video streams but don't specify codec
     }
+    
+    // Map redacted audio stream and set it as default
+    ffmpegCmd += ' -map 1:a -c:a copy -disposition:a:0 default';
+    
+    // Map original audio streams from original video if requested
+    if (includeOriginalAudio) {
+      ffmpegCmd += ' -map 0:a -c:a copy -disposition:a:1 none';
+    }
+    
+    // Map any subtitle streams from original video (but don't embed SRT file)
+    ffmpegCmd += ' -map 0:s? -c:s copy';
     
     // Add output file
     ffmpegCmd += ` "${outputFilePath}"`;
