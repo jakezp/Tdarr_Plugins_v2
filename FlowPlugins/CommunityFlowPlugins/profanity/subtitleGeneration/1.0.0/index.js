@@ -169,43 +169,25 @@ function redactProfanityInSegment(segment, profanitySegments, redactionChar) {
     }
     // Create a copy of the words array to work with
     var words = __spreadArray([], segment.words, true);
-    // Find profanity segments that overlap with this segment
-    var overlappingProfanity = profanitySegments.filter(function (profanity) {
-        return (profanity.start >= segment.start && profanity.start <= segment.end) || // Profanity starts in segment
-            (profanity.end >= segment.start && profanity.end <= segment.end) || // Profanity ends in segment
-            (profanity.start <= segment.start && profanity.end >= segment.end);
-    } // Profanity spans the entire segment
-    );
-    // If no profanity in this segment, return the text as is
-    if (overlappingProfanity.length === 0) {
-        return segment.text;
-    }
-    // Create a map of profanity words for quick lookup
-    var profanityWords = new Set(overlappingProfanity.map(function (p) { return p.word.toLowerCase(); }));
-    var _loop_1 = function (i) {
+    // Extract the actual profanity words from the segments
+    var profanityWordsSet = new Set();
+    profanitySegments.forEach(function (segment) {
+        // Clean the word and add it to the set
+        var cleanWord = segment.word.toLowerCase().replace(/[.,!?;:'"()\-\s]+/g, '');
+        profanityWordsSet.add(cleanWord);
+    });
+    // Log the profanity words for debugging
+    console.log("Profanity words: ".concat(Array.from(profanityWordsSet).join(', ')));
+    // Redact ONLY words that exactly match profanity words
+    for (var i = 0; i < words.length; i++) {
         var word = words[i];
         var cleanWord = word.word.toLowerCase().replace(/[.,!?;:'"()\-\s]+/g, '');
-        // Check if this word overlaps with any profanity segment
-        var isOverlapping = overlappingProfanity.some(function (profanity) {
-            return (word.start >= profanity.start && word.start <= profanity.end) || // Word starts in profanity
-                (word.end >= profanity.start && word.end <= profanity.end) || // Word ends in profanity
-                (word.start <= profanity.start && word.end >= profanity.end);
-        } // Word spans the entire profanity
-        );
-        // Only redact if the word overlaps with a profanity segment AND is in the profanity list
-        // or is very close to a profanity word (within 0.5 seconds)
-        if (isOverlapping && (profanityWords.has(cleanWord) ||
-            overlappingProfanity.some(function (p) {
-                return Math.abs(word.start - p.start) < 0.5 ||
-                    Math.abs(word.end - p.end) < 0.5;
-            }))) {
+        // Only redact if the word is in the profanity list
+        if (profanityWordsSet.has(cleanWord)) {
             // Redact the word
             words[i] = __assign(__assign({}, word), { word: redactionChar.repeat(word.word.length) });
+            console.log("Redacted word: ".concat(cleanWord));
         }
-    };
-    // Redact words that overlap with profanity segments AND match profanity words
-    for (var i = 0; i < words.length; i++) {
-        _loop_1(i);
     }
     // Reconstruct the text with redacted words
     return words.map(function (w) { return w.word; }).join(' ');
@@ -219,7 +201,10 @@ function redactProfanityInSegment(segment, profanitySegments, redactionChar) {
  */
 function generateSrtContent(transcriptionData, profanitySegments, redactionChar) {
     // Log profanity segments for debugging
-    console.log("Profanity segments for SRT generation: ".concat(JSON.stringify(profanitySegments)));
+    console.log("Number of profanity segments for SRT generation: ".concat(profanitySegments.length));
+    if (profanitySegments.length > 0) {
+        console.log("First few profanity segments: ".concat(JSON.stringify(profanitySegments.slice(0, 3))));
+    }
     if (!transcriptionData.segments || !Array.isArray(transcriptionData.segments)) {
         return '';
     }
