@@ -148,7 +148,7 @@ var details = function () { return ({
 exports.details = details;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, outputFilePath, outputContainer, copyVideoStream, includeOriginalAudio, originalVideoPath, processedAudioPath, originalDir, originalName, finalExt, scriptDir, scriptPath, ffmpegCmd, ffmpegArgs, cli, res, error_1, errorMessage;
+    var lib, outputFilePath, outputContainer, copyVideoStream, includeOriginalAudio, originalVideoPath, workDir, possibleVideoPath, processedAudioPath, originalDir, originalName, finalExt, scriptDir, scriptPath, ffmpegCmd, ffmpegArgs, cli, res, error_1, errorMessage;
     var _a, _b, _c, _d;
     return __generator(this, function (_e) {
         switch (_e.label) {
@@ -165,13 +165,30 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 copyVideoStream = args.inputs.copyVideoStream;
                 includeOriginalAudio = args.inputs.includeOriginalAudio;
                 originalVideoPath = args.inputFileObj._id;
-                if (!originalVideoPath) {
-                    args.jobLog('No original video file found');
-                    return [2 /*return*/, {
-                            outputFileObj: args.inputFileObj,
-                            outputNumber: 2,
-                            variables: args.variables,
-                        }];
+                args.jobLog("Original input file path: ".concat(originalVideoPath));
+                // Verify this is actually a video file
+                if (!originalVideoPath ||
+                    originalVideoPath.endsWith('.srt') ||
+                    originalVideoPath.endsWith('.ac3') ||
+                    originalVideoPath.endsWith('.aac') ||
+                    originalVideoPath.endsWith('.mp3')) {
+                    args.jobLog("Error: Input file is not a video file: ".concat(originalVideoPath));
+                    workDir = path.dirname(originalVideoPath);
+                    possibleVideoPath = path.join(workDir, path.basename(workDir) + '.mkv');
+                    args.jobLog("Attempting to use video file: ".concat(possibleVideoPath));
+                    if (fs.existsSync(possibleVideoPath)) {
+                        args.jobLog("Found video file: ".concat(possibleVideoPath));
+                        // Use this as the original video path
+                        originalVideoPath = possibleVideoPath;
+                    }
+                    else {
+                        args.jobLog('No original video file found');
+                        return [2 /*return*/, {
+                                outputFileObj: args.inputFileObj,
+                                outputNumber: 2,
+                                variables: args.variables,
+                            }];
+                    }
                 }
                 processedAudioPath = (_b = (_a = args.variables) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.combinedAudioPath;
                 // If no combined audio path is found, check if we have a redacted audio path (for stereo files)
@@ -209,13 +226,6 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 ffmpegCmd = "".concat(args.ffmpegPath, " -y");
                 // Add input files - original video and processed audio
                 ffmpegCmd += " -i \"".concat(originalVideoPath, "\" -i \"").concat(processedAudioPath, "\"");
-                // Add mapping options
-                if (copyVideoStream) {
-                    ffmpegCmd += ' -map 0:v:0 -c:v copy'; // Copy video stream
-                }
-                else {
-                    ffmpegCmd += ' -map 0:v:0'; // Map video stream but don't specify codec (use default)
-                }
                 // Map video stream from original video
                 if (copyVideoStream) {
                     ffmpegCmd += ' -map 0:v -c:v copy'; // Copy all video streams

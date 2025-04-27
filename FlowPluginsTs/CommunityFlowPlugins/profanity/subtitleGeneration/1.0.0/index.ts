@@ -133,7 +133,7 @@ function redactProfanityInSegment(
   
   // Find profanity segments that overlap with this segment
   const overlappingProfanity = profanitySegments.filter(
-    profanity => 
+    profanity =>
       (profanity.start >= segment.start && profanity.start <= segment.end) || // Profanity starts in segment
       (profanity.end >= segment.start && profanity.end <= segment.end) || // Profanity ends in segment
       (profanity.start <= segment.start && profanity.end >= segment.end) // Profanity spans the entire segment
@@ -144,19 +144,28 @@ function redactProfanityInSegment(
     return segment.text;
   }
   
-  // Redact words that overlap with profanity segments
+  // Create a map of profanity words for quick lookup
+  const profanityWords = new Set(overlappingProfanity.map(p => p.word.toLowerCase()));
+  
+  // Redact words that overlap with profanity segments AND match profanity words
   for (let i = 0; i < words.length; i++) {
     const word = words[i];
+    const cleanWord = word.word.toLowerCase().replace(/[.,!?;:'"()\-\s]+/g, '');
     
     // Check if this word overlaps with any profanity segment
     const isOverlapping = overlappingProfanity.some(
-      profanity => 
+      profanity =>
         (word.start >= profanity.start && word.start <= profanity.end) || // Word starts in profanity
         (word.end >= profanity.start && word.end <= profanity.end) || // Word ends in profanity
         (word.start <= profanity.start && word.end >= profanity.end) // Word spans the entire profanity
     );
     
-    if (isOverlapping) {
+    // Only redact if the word overlaps with a profanity segment AND is in the profanity list
+    // or is very close to a profanity word (within 0.5 seconds)
+    if (isOverlapping && (profanityWords.has(cleanWord) ||
+        overlappingProfanity.some(p =>
+          Math.abs(word.start - p.start) < 0.5 ||
+          Math.abs(word.end - p.end) < 0.5))) {
       // Redact the word
       words[i] = {
         ...word,
@@ -181,6 +190,8 @@ function generateSrtContent(
   profanitySegments: IProfanitySegment[],
   redactionChar: string,
 ): string {
+  // Log profanity segments for debugging
+  console.log(`Profanity segments for SRT generation: ${JSON.stringify(profanitySegments)}`);
   if (!transcriptionData.segments || !Array.isArray(transcriptionData.segments)) {
     return '';
   }

@@ -95,14 +95,35 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const includeOriginalAudio = args.inputs.includeOriginalAudio as boolean;
 
     // Get the original video file
-    const originalVideoPath = args.inputFileObj._id;
-    if (!originalVideoPath) {
-      args.jobLog('No original video file found');
-      return {
-        outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Failed
-        variables: args.variables,
-      };
+    // Make sure we're using the actual video file, not the SRT or audio file
+    let originalVideoPath = args.inputFileObj._id;
+    args.jobLog(`Original input file path: ${originalVideoPath}`);
+    
+    // Verify this is actually a video file
+    if (!originalVideoPath ||
+        originalVideoPath.endsWith('.srt') ||
+        originalVideoPath.endsWith('.ac3') ||
+        originalVideoPath.endsWith('.aac') ||
+        originalVideoPath.endsWith('.mp3')) {
+      args.jobLog(`Error: Input file is not a video file: ${originalVideoPath}`);
+      
+      // Try to find the original video file in the variables
+      const workDir = path.dirname(originalVideoPath);
+      const possibleVideoPath = path.join(workDir, path.basename(workDir) + '.mkv');
+      args.jobLog(`Attempting to use video file: ${possibleVideoPath}`);
+      
+      if (fs.existsSync(possibleVideoPath)) {
+        args.jobLog(`Found video file: ${possibleVideoPath}`);
+        // Use this as the original video path
+        originalVideoPath = possibleVideoPath;
+      } else {
+        args.jobLog('No original video file found');
+        return {
+          outputFileObj: args.inputFileObj,
+          outputNumber: 2, // Failed
+          variables: args.variables,
+        };
+      }
     }
 
     // Get the processed audio file - either combined (for 5.1) or directly redacted (for stereo)
@@ -154,13 +175,6 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     
     // Add input files - original video and processed audio
     ffmpegCmd += ` -i "${originalVideoPath}" -i "${processedAudioPath}"`;
-    
-    // Add mapping options
-    if (copyVideoStream) {
-      ffmpegCmd += ' -map 0:v:0 -c:v copy'; // Copy video stream
-    } else {
-      ffmpegCmd += ' -map 0:v:0'; // Map video stream but don't specify codec (use default)
-    }
     
     // Map video stream from original video
     if (copyVideoStream) {
