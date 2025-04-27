@@ -129,45 +129,108 @@ var details = function () { return ({
 }); };
 exports.details = details;
 /**
- * Find all SRT files in a directory
+ * Find all SRT files in a directory and its subdirectories
  * @param directory Directory to search in
  * @returns Array of SRT file paths
  */
 function findSrtFiles(directory) {
     return __awaiter(this, void 0, void 0, function () {
-        var files, error_1;
+        var results, entries, _i, entries_1, entry, fullPath, subDirResults, error_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
-                    _a.trys.push([0, 2, , 3]);
-                    return [4 /*yield*/, fs_1.promises.readdir(directory)];
+                    _a.trys.push([0, 7, , 8]);
+                    results = [];
+                    return [4 /*yield*/, fs_1.promises.readdir(directory, { withFileTypes: true })];
                 case 1:
-                    files = _a.sent();
-                    return [2 /*return*/, files
-                            .filter(function (file) { return file.toLowerCase().endsWith('.srt'); })
-                            .map(function (file) { return path.join(directory, file); })];
+                    entries = _a.sent();
+                    _i = 0, entries_1 = entries;
+                    _a.label = 2;
                 case 2:
+                    if (!(_i < entries_1.length)) return [3 /*break*/, 6];
+                    entry = entries_1[_i];
+                    fullPath = path.join(directory, entry.name);
+                    if (!entry.isDirectory()) return [3 /*break*/, 4];
+                    return [4 /*yield*/, findSrtFiles(fullPath)];
+                case 3:
+                    subDirResults = _a.sent();
+                    results.push.apply(results, subDirResults);
+                    return [3 /*break*/, 5];
+                case 4:
+                    if (entry.isFile() && entry.name.toLowerCase().endsWith('.srt')) {
+                        // Add SRT files to results
+                        results.push(fullPath);
+                    }
+                    _a.label = 5;
+                case 5:
+                    _i++;
+                    return [3 /*break*/, 2];
+                case 6: return [2 /*return*/, results];
+                case 7:
                     error_1 = _a.sent();
                     console.error("Error reading directory ".concat(directory, ":"), error_1);
                     return [2 /*return*/, []];
-                case 3: return [2 /*return*/];
+                case 8: return [2 /*return*/];
+            }
+        });
+    });
+}
+/**
+ * Find SRT files in the working directory and its parent directories
+ * @param workingDir The working directory
+ * @param maxDepth Maximum depth to search up the directory tree
+ * @returns Array of SRT file paths
+ */
+function findSrtFilesInWorkingArea(workingDir, maxDepth) {
+    if (maxDepth === void 0) { maxDepth = 3; }
+    return __awaiter(this, void 0, void 0, function () {
+        var results, workingDirResults, currentDir, i, parentDir, parentResults;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    results = [];
+                    return [4 /*yield*/, findSrtFiles(workingDir)];
+                case 1:
+                    workingDirResults = _a.sent();
+                    results.push.apply(results, workingDirResults);
+                    currentDir = workingDir;
+                    i = 0;
+                    _a.label = 2;
+                case 2:
+                    if (!(i < maxDepth)) return [3 /*break*/, 5];
+                    parentDir = path.dirname(currentDir);
+                    if (parentDir === currentDir) {
+                        // Reached the root directory
+                        return [3 /*break*/, 5];
+                    }
+                    return [4 /*yield*/, findSrtFiles(parentDir)];
+                case 3:
+                    parentResults = _a.sent();
+                    results.push.apply(results, parentResults);
+                    currentDir = parentDir;
+                    _a.label = 4;
+                case 4:
+                    i++;
+                    return [3 /*break*/, 2];
+                case 5: return [2 /*return*/, results];
             }
         });
     });
 }
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, replaceOriginalFile, copySrtFiles, copyOrMoveSrts, currentPath, originalPath, currentDir, originalDir, originalFileName, originalExt, finalPath, tempPath, originalFileExists, currentFileIsNotOriginal, srtFiles, _i, srtFiles_1, srtFile, srtFileName, newSrtFileName, newSrtPath, error_2, errorMessage;
-    return __generator(this, function (_a) {
-        switch (_a.label) {
+    var lib, replaceOriginalFile, copySrtFiles, copyOrMoveSrts, currentPath, originalPath, currentDir, originalDir, originalFileName, originalExt, finalPath, tempPath, originalFileExists, currentFileIsNotOriginal, srtFiles, subtitlePath, error_2, tempDir, tempDirFiles, _i, srtFiles_1, srtFile, srtFileName, newSrtFileName, newSrtPath, error_3, error_4, errorMessage;
+    var _a, _b;
+    return __generator(this, function (_c) {
+        switch (_c.label) {
             case 0:
                 lib = require('../../../../../methods/lib')();
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
                 args.inputs = lib.loadDefaultValues(args.inputs, details);
                 args.jobLog('Starting finalization of files');
-                _a.label = 1;
+                _c.label = 1;
             case 1:
-                _a.trys.push([1, 13, , 14]);
+                _c.trys.push([1, 22, , 23]);
                 replaceOriginalFile = args.inputs.replaceOriginalFile;
                 copySrtFiles = args.inputs.copySrtFiles;
                 copyOrMoveSrts = args.inputs.copyOrMoveSrts;
@@ -210,19 +273,19 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     })];
             case 2:
                 // Move the current file to the temporary path
-                _a.sent();
+                _c.sent();
                 return [4 /*yield*/, fs.promises.access(originalPath)
                         .then(function () { return true; })
                         .catch(function () { return false; })];
             case 3:
-                originalFileExists = _a.sent();
+                originalFileExists = _c.sent();
                 currentFileIsNotOriginal = originalPath !== currentPath;
                 if (!(originalFileExists && currentFileIsNotOriginal)) return [3 /*break*/, 5];
                 args.jobLog("Deleting original file: ".concat(originalPath));
                 return [4 /*yield*/, fs_1.promises.unlink(originalPath)];
             case 4:
-                _a.sent();
-                _a.label = 5;
+                _c.sent();
+                _c.label = 5;
             case 5: 
             // Move the temporary file to the original path
             return [4 /*yield*/, (0, fileMoveOrCopy_1.default)({
@@ -233,25 +296,62 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 })];
             case 6:
                 // Move the temporary file to the original path
-                _a.sent();
+                _c.sent();
                 finalPath = originalPath;
-                _a.label = 7;
+                _c.label = 7;
             case 7:
-                if (!copySrtFiles) return [3 /*break*/, 12];
+                if (!copySrtFiles) return [3 /*break*/, 21];
                 args.jobLog("".concat(copyOrMoveSrts === 'copy' ? 'Copying' : 'Moving', " SRT files to original directory"));
-                return [4 /*yield*/, findSrtFiles(currentDir)];
+                srtFiles = [];
+                if (!((_b = (_a = args.variables) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.subtitlePath)) return [3 /*break*/, 11];
+                subtitlePath = args.variables.user.subtitlePath;
+                args.jobLog("Found subtitle path in variables: ".concat(subtitlePath));
+                _c.label = 8;
             case 8:
-                srtFiles = _a.sent();
-                args.jobLog("Found ".concat(srtFiles.length, " SRT files"));
-                _i = 0, srtFiles_1 = srtFiles;
-                _a.label = 9;
+                _c.trys.push([8, 10, , 11]);
+                return [4 /*yield*/, fs_1.promises.access(subtitlePath, fs.constants.F_OK)];
             case 9:
-                if (!(_i < srtFiles_1.length)) return [3 /*break*/, 12];
+                _c.sent();
+                args.jobLog("Subtitle file exists at: ".concat(subtitlePath));
+                srtFiles.push(subtitlePath);
+                return [3 /*break*/, 11];
+            case 10:
+                error_2 = _c.sent();
+                args.jobLog("Subtitle file not found at: ".concat(subtitlePath, ". Error: ").concat(error_2));
+                return [3 /*break*/, 11];
+            case 11:
+                if (!(srtFiles.length === 0)) return [3 /*break*/, 15];
+                args.jobLog('Searching for SRT files in working area');
+                tempDir = path.dirname(currentPath);
+                args.jobLog("Checking temp directory: ".concat(tempDir));
+                return [4 /*yield*/, findSrtFiles(tempDir)];
+            case 12:
+                tempDirFiles = _c.sent();
+                if (!(tempDirFiles.length > 0)) return [3 /*break*/, 13];
+                args.jobLog("Found ".concat(tempDirFiles.length, " SRT files in temp directory"));
+                srtFiles.push.apply(srtFiles, tempDirFiles);
+                return [3 /*break*/, 15];
+            case 13:
+                // If no files found in temp directory, search more broadly
+                args.jobLog('No SRT files found in temp directory, searching more broadly');
+                return [4 /*yield*/, findSrtFilesInWorkingArea(currentDir)];
+            case 14:
+                srtFiles = _c.sent();
+                _c.label = 15;
+            case 15:
+                args.jobLog("Found ".concat(srtFiles.length, " SRT files: ").concat(srtFiles.join(', ')));
+                _i = 0, srtFiles_1 = srtFiles;
+                _c.label = 16;
+            case 16:
+                if (!(_i < srtFiles_1.length)) return [3 /*break*/, 21];
                 srtFile = srtFiles_1[_i];
                 srtFileName = path.basename(srtFile);
                 newSrtFileName = "".concat(originalFileName).concat(srtFileName.includes('_redacted') ? '_redacted' : '', ".srt");
                 newSrtPath = path.join(originalDir, newSrtFileName);
                 args.jobLog("".concat(copyOrMoveSrts === 'copy' ? 'Copying' : 'Moving', " ").concat(srtFile, " to ").concat(newSrtPath));
+                _c.label = 17;
+            case 17:
+                _c.trys.push([17, 19, , 20]);
                 // Copy or move the SRT file
                 return [4 /*yield*/, (0, fileMoveOrCopy_1.default)({
                         operation: copyOrMoveSrts,
@@ -259,14 +359,19 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         destinationPath: newSrtPath,
                         args: args,
                     })];
-            case 10:
+            case 18:
                 // Copy or move the SRT file
-                _a.sent();
-                _a.label = 11;
-            case 11:
+                _c.sent();
+                args.jobLog("Successfully ".concat(copyOrMoveSrts === 'copy' ? 'copied' : 'moved', " SRT file to ").concat(newSrtPath));
+                return [3 /*break*/, 20];
+            case 19:
+                error_3 = _c.sent();
+                args.jobLog("Error ".concat(copyOrMoveSrts === 'copy' ? 'copying' : 'moving', " SRT file: ").concat(error_3));
+                return [3 /*break*/, 20];
+            case 20:
                 _i++;
-                return [3 /*break*/, 9];
-            case 12:
+                return [3 /*break*/, 16];
+            case 21:
                 args.jobLog('Files finalized successfully');
                 return [2 /*return*/, {
                         outputFileObj: {
@@ -275,16 +380,16 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         outputNumber: 1,
                         variables: args.variables,
                     }];
-            case 13:
-                error_2 = _a.sent();
-                errorMessage = error_2 instanceof Error ? error_2.message : 'Unknown error';
+            case 22:
+                error_4 = _c.sent();
+                errorMessage = error_4 instanceof Error ? error_4.message : 'Unknown error';
                 args.jobLog("Error in finalizing files: ".concat(errorMessage));
                 return [2 /*return*/, {
                         outputFileObj: args.inputFileObj,
                         outputNumber: 2,
                         variables: args.variables,
                     }];
-            case 14: return [2 /*return*/];
+            case 23: return [2 /*return*/];
         }
     });
 }); };

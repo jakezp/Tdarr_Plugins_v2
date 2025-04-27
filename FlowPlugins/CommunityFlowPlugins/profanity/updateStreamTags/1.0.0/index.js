@@ -172,7 +172,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 ];
                 args.jobLog('Getting stream info with ffprobe');
                 ffprobeCli = new cliUtils_1.CLI({
-                    cli: 'ffprobe',
+                    cli: '/usr/lib/jellyfin-ffmpeg/ffprobe',
                     spawnArgs: ffprobeCmd,
                     spawnOpts: {},
                     jobLog: args.jobLog,
@@ -207,7 +207,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     filePath,
                 ];
                 ffprobeFileCli = new cliUtils_1.CLI({
-                    cli: 'ffprobe',
+                    cli: '/usr/lib/jellyfin-ffmpeg/ffprobe',
                     spawnArgs: ffprobeFileCmd,
                     spawnOpts: {},
                     jobLog: args.jobLog,

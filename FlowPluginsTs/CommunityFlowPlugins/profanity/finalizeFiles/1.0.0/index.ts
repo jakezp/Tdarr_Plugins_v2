@@ -73,20 +73,67 @@ const details = (): IpluginDetails => ({
 });
 
 /**
- * Find all SRT files in a directory
+ * Find all SRT files in a directory and its subdirectories
  * @param directory Directory to search in
  * @returns Array of SRT file paths
  */
 async function findSrtFiles(directory: string): Promise<string[]> {
   try {
-    const files = await fsp.readdir(directory);
-    return files
-      .filter(file => file.toLowerCase().endsWith('.srt'))
-      .map(file => path.join(directory, file));
+    const results: string[] = [];
+    
+    // Read the directory contents
+    const entries = await fsp.readdir(directory, { withFileTypes: true });
+    
+    // Process each entry
+    for (const entry of entries) {
+      const fullPath = path.join(directory, entry.name);
+      
+      if (entry.isDirectory()) {
+        // Recursively search subdirectories
+        const subDirResults = await findSrtFiles(fullPath);
+        results.push(...subDirResults);
+      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.srt')) {
+        // Add SRT files to results
+        results.push(fullPath);
+      }
+    }
+    
+    return results;
   } catch (error) {
     console.error(`Error reading directory ${directory}:`, error);
     return [];
   }
+}
+
+/**
+ * Find SRT files in the working directory and its parent directories
+ * @param workingDir The working directory
+ * @param maxDepth Maximum depth to search up the directory tree
+ * @returns Array of SRT file paths
+ */
+async function findSrtFilesInWorkingArea(workingDir: string, maxDepth: number = 3): Promise<string[]> {
+  const results: string[] = [];
+  
+  // Search in the working directory and its subdirectories
+  const workingDirResults = await findSrtFiles(workingDir);
+  results.push(...workingDirResults);
+  
+  // Search in parent directories up to maxDepth
+  let currentDir = workingDir;
+  for (let i = 0; i < maxDepth; i++) {
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      // Reached the root directory
+      break;
+    }
+    
+    const parentResults = await findSrtFiles(parentDir);
+    results.push(...parentResults);
+    
+    currentDir = parentDir;
+  }
+  
+  return results;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -181,9 +228,45 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     if (copySrtFiles) {
       args.jobLog(`${copyOrMoveSrts === 'copy' ? 'Copying' : 'Moving'} SRT files to original directory`);
 
-      // Find all SRT files in the current directory
-      const srtFiles = await findSrtFiles(currentDir);
-      args.jobLog(`Found ${srtFiles.length} SRT files`);
+      // Check if we have a subtitle path in variables
+      let srtFiles: string[] = [];
+      
+      if (args.variables?.user?.subtitlePath) {
+        // Use the subtitle path from variables
+        const subtitlePath = args.variables.user.subtitlePath;
+        args.jobLog(`Found subtitle path in variables: ${subtitlePath}`);
+        
+        // Check if the file exists
+        try {
+          await fsp.access(subtitlePath, fs.constants.F_OK);
+          args.jobLog(`Subtitle file exists at: ${subtitlePath}`);
+          srtFiles.push(subtitlePath);
+        } catch (error) {
+          args.jobLog(`Subtitle file not found at: ${subtitlePath}. Error: ${error}`);
+          // If the file doesn't exist, we'll fall back to searching
+        }
+      }
+      
+      // If no subtitle path was found or the file doesn't exist, search for SRT files
+      if (srtFiles.length === 0) {
+        args.jobLog('Searching for SRT files in working area');
+        
+        // First check the temp directory where the subtitle might have been generated
+        const tempDir = path.dirname(currentPath);
+        args.jobLog(`Checking temp directory: ${tempDir}`);
+        const tempDirFiles = await findSrtFiles(tempDir);
+        
+        if (tempDirFiles.length > 0) {
+          args.jobLog(`Found ${tempDirFiles.length} SRT files in temp directory`);
+          srtFiles.push(...tempDirFiles);
+        } else {
+          // If no files found in temp directory, search more broadly
+          args.jobLog('No SRT files found in temp directory, searching more broadly');
+          srtFiles = await findSrtFilesInWorkingArea(currentDir);
+        }
+      }
+      
+      args.jobLog(`Found ${srtFiles.length} SRT files: ${srtFiles.join(', ')}`);
 
       // Process each SRT file
       for (const srtFile of srtFiles) {
@@ -195,13 +278,18 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         
         args.jobLog(`${copyOrMoveSrts === 'copy' ? 'Copying' : 'Moving'} ${srtFile} to ${newSrtPath}`);
         
-        // Copy or move the SRT file
-        await fileMoveOrCopy({
-          operation: copyOrMoveSrts as 'copy' | 'move',
-          sourcePath: srtFile,
-          destinationPath: newSrtPath,
-          args,
-        });
+        try {
+          // Copy or move the SRT file
+          await fileMoveOrCopy({
+            operation: copyOrMoveSrts as 'copy' | 'move',
+            sourcePath: srtFile,
+            destinationPath: newSrtPath,
+            args,
+          });
+          args.jobLog(`Successfully ${copyOrMoveSrts === 'copy' ? 'copied' : 'moved'} SRT file to ${newSrtPath}`);
+        } catch (error) {
+          args.jobLog(`Error ${copyOrMoveSrts === 'copy' ? 'copying' : 'moving'} SRT file: ${error}`);
+        }
       }
     }
 

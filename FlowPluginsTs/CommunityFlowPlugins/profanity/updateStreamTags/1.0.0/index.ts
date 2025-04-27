@@ -109,7 +109,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
 
     args.jobLog('Getting stream info with ffprobe');
     const ffprobeCli = new CLI({
-      cli: 'ffprobe',
+      cli: '/usr/lib/jellyfin-ffmpeg/ffprobe',
       spawnArgs: ffprobeCmd,
       spawnOpts: {},
       jobLog: args.jobLog,
@@ -149,7 +149,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       ];
       
       const ffprobeFileCli = new CLI({
-        cli: 'ffprobe',
+        cli: '/usr/lib/jellyfin-ffmpeg/ffprobe',
         spawnArgs: ffprobeFileCmd,
         spawnOpts: {},
         jobLog: args.jobLog,
