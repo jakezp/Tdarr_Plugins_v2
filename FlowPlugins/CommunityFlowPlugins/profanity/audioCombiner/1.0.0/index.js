@@ -270,20 +270,35 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 // Log the exact channel layout for debugging
                 args.jobLog("Creating filter complex for channel layout: \"".concat(channelLayout, "\""));
                 if (channelLayout === '5.1') {
-                    filterComplex = '[0:a]channelsplit=channel_layout=5.1[FL][FR][FC][LFE][BL][BR];[1:a]aformat=channel_layouts=mono[redactedFC];[FL][FR][redactedFC][LFE][BL][BR]amerge=inputs=6[out]';
+                    // For standard 5.1:
+                    // 1. Zero out the center channel from original audio
+                    // 2. Format the redacted center channel as mono
+                    // 3. Merge them and map to proper 5.1 channels
+                    filterComplex = "[0:a]pan=5.1|FL=FL|FR=FR|FC=0|LFE=LFE|BL=BL|BR=BR[no_center];" +
+                        "[1:a]aformat=channel_layouts=mono[redacted_center];" +
+                        "[no_center][redacted_center]amerge=inputs=2,pan=5.1|FL=FL-0|FR=FR-0|FC=FC-1|LFE=LFE-0|BL=BL-0|BR=BR-0[out]";
                 }
                 else if (channelLayout === '5.1(side)') {
-                    // Use the exact layout string for 5.1(side)
-                    filterComplex = '[0:a]channelsplit=channel_layout=5.1(side)[FL][FR][FC][LFE][SL][SR];[1:a]aformat=channel_layouts=mono[redactedFC];[FL][FR][redactedFC][LFE][SL][SR]amerge=inputs=6[out]';
+                    // For 5.1(side) layout:
+                    // Same approach but with side channels (SL/SR) instead of back channels (BL/BR)
+                    filterComplex = "[0:a]pan=5.1(side)|FL=FL|FR=FR|FC=0|LFE=LFE|SL=SL|SR=SR[no_center];" +
+                        "[1:a]aformat=channel_layouts=mono[redacted_center];" +
+                        "[no_center][redacted_center]amerge=inputs=2,pan=5.1(side)|FL=FL-0|FR=FR-0|FC=FC-1|LFE=LFE-0|SL=SL-0|SR=SR-0[out]";
                 }
                 else if (channelLayout === '7.1') {
-                    filterComplex = '[0:a]channelsplit=channel_layout=7.1[FL][FR][FC][LFE][BL][BR][SL][SR];[1:a]aformat=channel_layouts=mono[redactedFC];[FL][FR][redactedFC][LFE][BL][BR][SL][SR]amerge=inputs=8[out]';
+                    // For 7.1 layout:
+                    // Same approach but with all 8 channels
+                    filterComplex = "[0:a]pan=7.1|FL=FL|FR=FR|FC=0|LFE=LFE|BL=BL|BR=BR|SL=SL|SR=SR[no_center];" +
+                        "[1:a]aformat=channel_layouts=mono[redacted_center];" +
+                        "[no_center][redacted_center]amerge=inputs=2,pan=7.1|FL=FL-0|FR=FR-0|FC=FC-1|LFE=LFE-0|BL=BL-0|BR=BR-0|SL=SL-0|SR=SR-0[out]";
                 }
                 else {
-                    // For unknown layouts, try a more robust approach
-                    args.jobLog("Warning: Using alternative approach for channel layout: ".concat(channelLayout));
-                    // Instead of channelsplit, use pan filter to extract center channel and remix
-                    filterComplex = "[0:a]pan=5.1|c0=c0|c1=c1|c3=c3|c4=c4|c5=c5[main_no_center];[1:a]aformat=channel_layouts=mono[redactedFC];[main_no_center][redactedFC]amerge=inputs=2[out]";
+                    // For unknown layouts, try a generic approach that should work for most surround formats
+                    args.jobLog("Warning: Using generic approach for unknown channel layout: ".concat(channelLayout));
+                    // Use a simpler approach that should work for most surround formats
+                    filterComplex = "[0:a]pan=5.1|FL=FL|FR=FR|FC=0|LFE=LFE|BL=BL|BR=BR[no_center];" +
+                        "[1:a]aformat=channel_layouts=mono[redacted_center];" +
+                        "[no_center][redacted_center]amerge=inputs=2,pan=5.1|FL=FL-0|FR=FR-0|FC=FC-1|LFE=LFE-0|BL=BL-0|BR=BR-0[out]";
                 }
                 args.jobLog("Generated filter complex: ".concat(filterComplex));
                 ffmpegCmd = "".concat(args.ffmpegPath, " -y -i \"").concat(originalAudioPath, "\" -i \"").concat(redactedCenterPath, "\" -filter_complex \"").concat(filterComplex, "\" -map \"[out]\" -c:a ").concat(codec, " -ar ").concat(sampleRate, " -b:a ").concat(bitRate, " \"").concat(outputFilePath, "\"");
