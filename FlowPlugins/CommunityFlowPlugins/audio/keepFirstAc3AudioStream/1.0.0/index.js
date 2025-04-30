@@ -102,15 +102,16 @@ var details = function () { return ({
 exports.details = details;
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
     var lib, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, fs_1, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, audioStreams, firstAudioStream, mapArgs_1, videoStreams, subtitleStreams, fileDir, fileName, fileExt, outputFilePath, ffmpegArgs, cli, res, fs, error_2, errorMessage;
-    return __generator(this, function (_a) {
-        switch (_a.label) {
+    var _a;
+    return __generator(this, function (_b) {
+        switch (_b.label) {
             case 0:
                 lib = require('../../../../../methods/lib')();
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
                 args.inputs = lib.loadDefaultValues(args.inputs, details);
-                _a.label = 1;
+                _b.label = 1;
             case 1:
-                _a.trys.push([1, 8, , 9]);
+                _b.trys.push([1, 8, , 9]);
                 filePath = args.inputFileObj._id;
                 if (!filePath) {
                     args.jobLog('No input file found');
@@ -140,7 +141,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 });
                 return [4 /*yield*/, ffprobeCli.runCli()];
             case 2:
-                ffprobeResult = _a.sent();
+                ffprobeResult = _b.sent();
                 if (ffprobeResult.cliExitCode !== 0) {
                     args.jobLog('Failed to get stream info with ffprobe');
                     return [2 /*return*/, {
@@ -150,9 +151,9 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         }];
                 }
                 streamInfo = void 0;
-                _a.label = 3;
+                _b.label = 3;
             case 3:
-                _a.trys.push([3, 5, , 6]);
+                _b.trys.push([3, 5, , 6]);
                 fs_1 = require('fs');
                 tempOutputPath = "".concat(path.dirname(filePath), "/ffprobe_output_").concat(Date.now(), ".json");
                 ffprobeFileCmd = [
@@ -175,7 +176,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 });
                 return [4 /*yield*/, ffprobeFileCli.runCli()];
             case 4:
-                _a.sent();
+                _b.sent();
                 // Read the output file
                 if (fs_1.existsSync(tempOutputPath)) {
                     stdoutContent = fs_1.readFileSync(tempOutputPath, 'utf8');
@@ -188,7 +189,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 }
                 return [3 /*break*/, 6];
             case 5:
-                error_1 = _a.sent();
+                error_1 = _b.sent();
                 args.jobLog("Error parsing ffprobe output: ".concat(error_1));
                 return [2 /*return*/, {
                         outputFileObj: args.inputFileObj,
@@ -264,7 +265,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 });
                 return [4 /*yield*/, cli.runCli()];
             case 7:
-                res = _a.sent();
+                res = _b.sent();
                 if (res.cliExitCode !== 0) {
                     args.jobLog('FFmpeg command failed');
                     return [2 /*return*/, {
@@ -277,6 +278,8 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 fs.unlinkSync(filePath);
                 fs.renameSync(outputFilePath, filePath);
                 args.jobLog("Successfully kept only the first AC3 audio stream");
+                // Log all variables for debugging
+                args.jobLog("Variables before return: ".concat(JSON.stringify(((_a = args.variables) === null || _a === void 0 ? void 0 : _a.user) || {})));
                 return [2 /*return*/, {
                         outputFileObj: {
                             _id: filePath,
@@ -285,7 +288,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         variables: args.variables,
                     }];
             case 8:
-                error_2 = _a.sent();
+                error_2 = _b.sent();
                 errorMessage = error_2 instanceof Error ? error_2.message : 'Unknown error';
                 args.jobLog("Error in keepFirstAc3AudioStream plugin: ".concat(errorMessage));
                 return [2 /*return*/, {

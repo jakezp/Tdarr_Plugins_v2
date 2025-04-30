@@ -238,6 +238,9 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
 
     args.jobLog(`Successfully kept only the first AC3 audio stream`);
 
+    // Log all variables for debugging
+    args.jobLog(`Variables before return: ${JSON.stringify(args.variables?.user || {})}`);
+    
     return {
       outputFileObj: {
         _id: filePath,
