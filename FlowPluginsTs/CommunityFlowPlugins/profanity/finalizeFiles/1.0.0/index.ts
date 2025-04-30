@@ -181,13 +181,18 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const originalDir = path.dirname(originalPath);
     const originalFileName = path.basename(originalPath, path.extname(originalPath));
     const originalExt = path.extname(originalPath);
+    const currentExt = path.extname(currentPath).toLowerCase();
 
     args.jobLog(`Current directory: ${currentDir}`);
     args.jobLog(`Original directory: ${originalDir}`);
+    args.jobLog(`Current file extension: ${currentExt}`);
 
-    // Replace the original file if requested
+    // Check if the current file is an SRT file
+    const isCurrentSrtFile = currentExt === '.srt';
+    
+    // Replace the original file if requested and the current file is not an SRT file
     let finalPath = currentPath;
-    if (replaceOriginalFile) {
+    if (replaceOriginalFile && !isCurrentSrtFile) {
       args.jobLog('Replacing original file');
 
       // Use FFmpeg to copy the file to preserve metadata
@@ -247,6 +252,8 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       }
 
       finalPath = originalPath;
+    } else if (isCurrentSrtFile) {
+      args.jobLog('Current file is an SRT file, skipping video file replacement');
     }
 
     // Copy SRT files if requested
