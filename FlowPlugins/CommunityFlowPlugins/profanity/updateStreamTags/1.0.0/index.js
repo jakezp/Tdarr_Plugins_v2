@@ -340,9 +340,12 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         // Add metadata arguments
                         metadataArgs_1.push("-metadata:s:a:".concat(audioStreamIndex_1), "title=".concat(title));
                         metadataArgs_1.push("-metadata:s:a:".concat(audioStreamIndex_1), "language=".concat(lang));
-                        // Set the first audio stream as default
+                        // Set the first audio stream as default and add profanity_filtered tag
                         if (audioStreamIndex_1 === 0) {
                             metadataArgs_1.push("-disposition:a:".concat(audioStreamIndex_1), 'default');
+                            // Add custom 'profanity_filtered' tag to the first audio stream (redacted/Family)
+                            metadataArgs_1.push("-metadata:s:a:".concat(audioStreamIndex_1), "profanity_filtered=true");
+                            args.jobLog("Adding profanity_filtered tag to audio stream ".concat(audioStreamIndex_1));
                         }
                         else {
                             metadataArgs_1.push("-disposition:a:".concat(audioStreamIndex_1), 'none');

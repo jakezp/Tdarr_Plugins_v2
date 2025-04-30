@@ -285,9 +285,12 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         metadataArgs.push(`-metadata:s:a:${audioStreamIndex}`, `title=${title}`);
         metadataArgs.push(`-metadata:s:a:${audioStreamIndex}`, `language=${lang}`);
         
-        // Set the first audio stream as default
+        // Set the first audio stream as default and add profanity_filtered tag
         if (audioStreamIndex === 0) {
           metadataArgs.push(`-disposition:a:${audioStreamIndex}`, 'default');
+          // Add custom 'profanity_filtered' tag to the first audio stream (redacted/Family)
+          metadataArgs.push(`-metadata:s:a:${audioStreamIndex}`, `profanity_filtered=true`);
+          args.jobLog(`Adding profanity_filtered tag to audio stream ${audioStreamIndex}`);
         } else {
           metadataArgs.push(`-disposition:a:${audioStreamIndex}`, 'none');
         }

@@ -8,29 +8,26 @@ import * as path from 'path';
 
 /* eslint no-plusplus: ["error", { "allowForLoopAfterthoughts": true }] */
 const details = (): IpluginDetails => ({
-  name: 'Keep First AC3 Audio Stream Only',
-  description: 'WARNING: This plugin is risky and should only be used in specific cases like profanity filtering. '
-    + 'It checks if the first audio stream is AC3 codec, and if so, removes all other audio streams. '
-    + 'If the first audio stream is not AC3, the process will fail. '
-    + 'This can result in loss of audio tracks including commentary, foreign languages, etc.',
+  name: 'Check Profanity Filtered Tag',
+  description: 'Checks if the first audio stream has been processed for profanity (has profanity_filtered tag)',
   style: {
-    borderColor: '#ff6b6b', // Red to indicate potential risk
+    borderColor: '#FF5733', // Orange-red color for profanity-related plugins
   },
-  tags: 'audio,ac3,filter,profanity',
+  tags: 'metadata,streams,tags,profanity',
   isStartPlugin: false,
   pType: '',
   requiresVersion: '2.11.01',
   sidebarPosition: -1,
-  icon: '🔊',
+  icon: 'faTag',
   inputs: [],
   outputs: [
     {
       number: 1,
-      tooltip: 'First audio stream is AC3 and other audio streams were removed',
+      tooltip: 'Audio has been processed (profanity_filtered tag found)',
     },
     {
       number: 2,
-      tooltip: 'First audio stream is not AC3, process failed',
+      tooltip: 'Audio needs processing (no profanity_filtered tag)',
     },
   ],
 });
@@ -40,6 +37,8 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
   args.inputs = lib.loadDefaultValues(args.inputs, details);
 
+  args.jobLog('Checking for profanity_filtered tag on first audio stream');
+
   try {
     // Get the file path
     const filePath = args.inputFileObj._id;
@@ -47,7 +46,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       args.jobLog('No input file found');
       return {
         outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Fail
+        outputNumber: 2, // Needs processing
         variables: args.variables,
       };
     }
@@ -78,7 +77,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       args.jobLog('Failed to get stream info with ffprobe');
       return {
         outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Failed
+        outputNumber: 2, // Needs processing
         variables: args.variables,
       };
     }
@@ -127,7 +126,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       args.jobLog(`Error parsing ffprobe output: ${error}`);
       return {
         outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Failed
+        outputNumber: 2, // Needs processing
         variables: args.variables,
       };
     }
@@ -136,119 +135,48 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       args.jobLog('No stream info found');
       return {
         outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Failed
+        outputNumber: 2, // Needs processing
         variables: args.variables,
       };
     }
 
-    // Find all audio streams
+    // Find the first audio stream
     const audioStreams = streamInfo.streams.filter((stream: any) => stream.codec_type === 'audio');
-
-    // If no audio streams found, fail
+    
     if (audioStreams.length === 0) {
-      args.jobLog('No audio streams found in the file');
+      args.jobLog('No audio streams found');
       return {
         outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Fail
+        outputNumber: 2, // Needs processing
         variables: args.variables,
       };
     }
 
-    // Get the first audio stream
     const firstAudioStream = audioStreams[0];
     
-    // Check if the first audio stream is AC3
-    if (firstAudioStream.codec_name.toLowerCase() !== 'ac3') {
-      args.jobLog(`First audio stream (index ${firstAudioStream.index}) is not AC3, it's ${firstAudioStream.codec_name}`);
+    // Check if the first audio stream has the profanity_filtered tag
+    if (firstAudioStream.tags && firstAudioStream.tags.profanity_filtered === 'true') {
+      args.jobLog('Found profanity_filtered tag on first audio stream - already processed');
       return {
         outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Fail
+        outputNumber: 1, // Already processed
         variables: args.variables,
       };
     }
-
-    // First audio stream is AC3, keep it and remove all other audio streams
-    args.jobLog(`First audio stream (index ${firstAudioStream.index}) is AC3, keeping only this audio stream`);
     
-    // Build the map arguments to keep only the first audio stream
-    const mapArgs: string[] = [];
-    
-    // Map all video streams
-    const videoStreams = streamInfo.streams.filter((stream: any) => stream.codec_type === 'video');
-    videoStreams.forEach((stream: any) => {
-      mapArgs.push('-map', `0:${stream.index}`);
-    });
-    
-    // Map only the first audio stream
-    mapArgs.push('-map', `0:${firstAudioStream.index}`);
-    
-    // Map all subtitle streams
-    const subtitleStreams = streamInfo.streams.filter((stream: any) => stream.codec_type === 'subtitle');
-    subtitleStreams.forEach((stream: any) => {
-      mapArgs.push('-map', `0:${stream.index}`);
-    });
-    
-    // Create a temporary output file
-    const fileDir = path.dirname(filePath);
-    const fileName = path.basename(filePath, path.extname(filePath));
-    const fileExt = path.extname(filePath);
-    const outputFilePath = `${fileDir}/${fileName}_ac3only${fileExt}`;
-
-    // Build the ffmpeg command
-    const ffmpegArgs = [
-      '-i', filePath,
-      ...mapArgs,
-      '-c', 'copy',
-      outputFilePath,
-    ];
-
-    args.jobLog(`Executing FFmpeg command to keep only the first AC3 audio stream`);
-    args.jobLog(`FFmpeg arguments: ${ffmpegArgs.join(' ')}`);
-
-    // Execute FFmpeg command
-    const cli = new CLI({
-      cli: args.ffmpegPath,
-      spawnArgs: ffmpegArgs,
-      spawnOpts: {},
-      jobLog: args.jobLog,
-      outputFilePath,
-      inputFileObj: args.inputFileObj,
-      logFullCliOutput: args.logFullCliOutput,
-      updateWorker: args.updateWorker,
-      args,
-    });
-
-    const res = await cli.runCli();
-
-    if (res.cliExitCode !== 0) {
-      args.jobLog('FFmpeg command failed');
-      return {
-        outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Failed
-        variables: args.variables,
-      };
-    }
-
-    // Replace the original file with the new file
-    const fs = require('fs');
-    fs.unlinkSync(filePath);
-    fs.renameSync(outputFilePath, filePath);
-
-    args.jobLog(`Successfully kept only the first AC3 audio stream`);
-
-    return {
-      outputFileObj: {
-        _id: filePath,
-      },
-      outputNumber: 1, // Success
-      variables: args.variables,
-    };
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    args.jobLog(`Error in keepFirstAc3AudioStream plugin: ${errorMessage}`);
+    args.jobLog('No profanity_filtered tag found on first audio stream - needs processing');
     return {
       outputFileObj: args.inputFileObj,
-      outputNumber: 2, // Failed
+      outputNumber: 2, // Needs processing
+      variables: args.variables,
+    };
+    
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    args.jobLog(`Error checking for profanity_filtered tag: ${errorMessage}`);
+    return {
+      outputFileObj: args.inputFileObj,
+      outputNumber: 2, // Needs processing
       variables: args.variables,
     };
   }
