@@ -245,6 +245,8 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     '-i', filePath
                 ], mapArgs_1, true), [
                     '-c', 'copy',
+                    '-map_metadata', '0',
+                    '-map_metadata:s:a:0', '0:s:a:0',
                     outputFilePath,
                 ], false);
                 args.jobLog("Executing FFmpeg command to keep only the first AC3 audio stream");

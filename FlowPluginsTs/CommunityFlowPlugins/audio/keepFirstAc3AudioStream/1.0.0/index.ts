@@ -199,6 +199,8 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       '-i', filePath,
       ...mapArgs,
       '-c', 'copy',
+      '-map_metadata', '0',  // Copy all metadata from input
+      '-map_metadata:s:a:0', '0:s:a:0',  // Copy audio stream metadata
       outputFilePath,
     ];
 
