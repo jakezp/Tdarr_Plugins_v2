@@ -151,18 +151,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const copySrtFiles = args.inputs.copySrtFiles as boolean;
     const copyOrMoveSrts = args.inputs.copyOrMoveSrts as string;
 
-    // Get the current file path (redacted version)
-    const currentPath = args.inputFileObj._id;
-    if (!currentPath) {
-      args.jobLog('No input file found');
-      return {
-        outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Failed
-        variables: args.variables,
-      };
-    }
-
-    // Get the original file path
+    // Get the original file path - this is our reference point
     const originalPath = args.originalLibraryFile._id;
     if (!originalPath) {
       args.jobLog('No original file found');
@@ -173,80 +162,70 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       };
     }
 
-    args.jobLog(`Current file: ${currentPath}`);
-    args.jobLog(`Original file: ${originalPath}`);
-
-    // Get the directories
-    const currentDir = path.dirname(currentPath);
+    // Get the original file information
     const originalDir = path.dirname(originalPath);
     const originalFileName = path.basename(originalPath, path.extname(originalPath));
     const originalExt = path.extname(originalPath);
 
-    args.jobLog(`Current directory: ${currentDir}`);
+    args.jobLog(`Original file: ${originalPath}`);
     args.jobLog(`Original directory: ${originalDir}`);
-    
-    // Replace the original file if requested
-    let finalPath = currentPath;
-    if (replaceOriginalFile) {
-      args.jobLog('Replacing original file');
 
-      // Use FFmpeg to copy the file to preserve metadata
-      args.jobLog('Using FFmpeg to copy the file to preserve metadata');
-      
-      // Check if the original file exists and is different from the current file
-      const originalFileExists = await fs.promises.access(originalPath)
+    // Get the redacted video file path from variables
+    // This is set by the finalAssembly plugin
+    let redactedVideoPath = '';
+    if (args.variables?.user?.redactedVideoPath) {
+      redactedVideoPath = args.variables.user.redactedVideoPath;
+      args.jobLog(`Found redacted video path in variables: ${redactedVideoPath}`);
+    }
+
+    // Replace the original file if requested and we have a redacted video path
+    if (replaceOriginalFile && redactedVideoPath) {
+      args.jobLog('Replacing original file with redacted video');
+
+      // Check if the redacted video file exists
+      const redactedVideoExists = await fs.promises.access(redactedVideoPath)
         .then(() => true)
         .catch(() => false);
-      
-      const currentFileIsNotOriginal = originalPath !== currentPath;
 
-      // Build the FFmpeg command
-      const ffmpegArgs = [
-        '-y',  // Automatically overwrite output files
-        '-i', currentPath,
-        '-map', '0',
-        '-c', 'copy',
-        originalPath,
-      ];
+      if (!redactedVideoExists) {
+        args.jobLog(`Redacted video file not found at: ${redactedVideoPath}`);
+      } else {
+        // Use FFmpeg to copy the file to preserve metadata
+        args.jobLog('Using FFmpeg to copy the file with metadata preservation');
+        
+        // Build the FFmpeg command
+        const ffmpegArgs = [
+          '-y',  // Automatically overwrite output files
+          '-i', redactedVideoPath,
+          '-map', '0',
+          '-c', 'copy',
+          originalPath,
+        ];
 
-      args.jobLog(`Executing FFmpeg command to copy file with metadata`);
-      args.jobLog(`FFmpeg arguments: ${ffmpegArgs.join(' ')}`);
+        args.jobLog(`Executing FFmpeg command to copy file with metadata`);
+        args.jobLog(`FFmpeg arguments: ${ffmpegArgs.join(' ')}`);
 
-      // Execute FFmpeg command
-      const cli = new CLI({
-        cli: args.ffmpegPath,
-        spawnArgs: ffmpegArgs,
-        spawnOpts: {},
-        jobLog: args.jobLog,
-        outputFilePath: originalPath,
-        inputFileObj: args.inputFileObj,
-        logFullCliOutput: args.logFullCliOutput,
-        updateWorker: args.updateWorker,
-        args,
-      });
+        // Execute FFmpeg command
+        const cli = new CLI({
+          cli: args.ffmpegPath,
+          spawnArgs: ffmpegArgs,
+          spawnOpts: {},
+          jobLog: args.jobLog,
+          outputFilePath: originalPath,
+          inputFileObj: args.inputFileObj,
+          logFullCliOutput: args.logFullCliOutput,
+          updateWorker: args.updateWorker,
+          args,
+        });
 
-      const res = await cli.runCli();
+        const res = await cli.runCli();
 
-      if (res.cliExitCode !== 0) {
-        args.jobLog('FFmpeg file copy failed');
-        return {
-          outputFileObj: args.inputFileObj,
-          outputNumber: 2, // Failed
-          variables: args.variables,
-        };
-      }
-
-      // Delete the current file if it's different from the original
-      if (currentFileIsNotOriginal) {
-        try {
-          args.jobLog(`Deleting current file: ${currentPath}`);
-          await fsp.unlink(currentPath);
-        } catch (err) {
-          args.jobLog(`Warning: Could not delete current file: ${err}`);
+        if (res.cliExitCode !== 0) {
+          args.jobLog('FFmpeg file copy failed');
+        } else {
+          args.jobLog(`Successfully replaced original file with redacted video`);
         }
       }
-
-      finalPath = originalPath;
     }
 
     // Copy SRT files if requested
@@ -276,18 +255,20 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       if (srtFiles.length === 0) {
         args.jobLog('Searching for SRT files in working area');
         
+        // Get the current working directory
+        const workingDir = path.dirname(args.inputFileObj._id);
+        args.jobLog(`Checking working directory: ${workingDir}`);
+        
         // First check the temp directory where the subtitle might have been generated
-        const tempDir = path.dirname(currentPath);
-        args.jobLog(`Checking temp directory: ${tempDir}`);
-        const tempDirFiles = await findSrtFiles(tempDir);
+        const tempDirFiles = await findSrtFiles(workingDir);
         
         if (tempDirFiles.length > 0) {
-          args.jobLog(`Found ${tempDirFiles.length} SRT files in temp directory`);
+          args.jobLog(`Found ${tempDirFiles.length} SRT files in working directory`);
           srtFiles.push(...tempDirFiles);
         } else {
           // If no files found in temp directory, search more broadly
-          args.jobLog('No SRT files found in temp directory, searching more broadly');
-          srtFiles = await findSrtFilesInWorkingArea(currentDir);
+          args.jobLog('No SRT files found in working directory, searching more broadly');
+          srtFiles = await findSrtFilesInWorkingArea(workingDir);
         }
       }
       
@@ -346,10 +327,9 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
 
     args.jobLog('Files finalized successfully');
 
+    // Always return the original input file object to avoid issues
     return {
-      outputFileObj: {
-        _id: finalPath,
-      },
+      outputFileObj: args.inputFileObj,
       outputNumber: 1, // Success
       variables: args.variables,
     };

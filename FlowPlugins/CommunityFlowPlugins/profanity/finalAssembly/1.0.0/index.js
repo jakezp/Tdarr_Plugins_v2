@@ -293,7 +293,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 }
                 args.jobLog("Final assembly successful: ".concat(outputFilePath));
                 // Update variables for downstream plugins
-                args.variables = __assign(__assign({}, args.variables), { user: __assign(__assign({}, args.variables.user), { finalOutputPath: outputFilePath }) });
+                args.variables = __assign(__assign({}, args.variables), { user: __assign(__assign({}, args.variables.user), { finalOutputPath: outputFilePath, redactedVideoPath: outputFilePath }) });
                 return [2 /*return*/, {
                         outputFileObj: {
                             _id: outputFilePath,

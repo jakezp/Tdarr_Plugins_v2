@@ -260,6 +260,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       user: {
         ...args.variables.user,
         finalOutputPath: outputFilePath,
+        redactedVideoPath: outputFilePath, // Add this for the finalizeFiles plugin
       },
     };
     
