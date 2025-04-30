@@ -89,7 +89,7 @@ var details = function () { return ({
 }); };
 exports.details = details;
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, fs, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, audioStreams, firstAudioStream, error_2, errorMessage;
+    var lib, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, fs, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, audioStreams, firstAudioStream_1, hasProfanityTag, error_2, errorMessage;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -202,15 +202,22 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                             variables: args.variables,
                         }];
                 }
-                firstAudioStream = audioStreams[0];
+                firstAudioStream_1 = audioStreams[0];
                 // Check if the first audio stream has the profanity_filtered tag
-                if (firstAudioStream.tags && firstAudioStream.tags.profanity_filtered === 'true') {
-                    args.jobLog('Found profanity_filtered tag on first audio stream - already processed');
-                    return [2 /*return*/, {
-                            outputFileObj: args.inputFileObj,
-                            outputNumber: 1,
-                            variables: args.variables,
-                        }];
+                // MKV containers might capitalize the tag as "PROFANITY_FILTERED"
+                if (firstAudioStream_1.tags) {
+                    hasProfanityTag = Object.keys(firstAudioStream_1.tags).some(function (key) {
+                        return key.toLowerCase() === 'profanity_filtered' &&
+                            firstAudioStream_1.tags[key].toLowerCase() === 'true';
+                    });
+                    if (hasProfanityTag) {
+                        args.jobLog('Found profanity_filtered tag on first audio stream - already processed');
+                        return [2 /*return*/, {
+                                outputFileObj: args.inputFileObj,
+                                outputNumber: 1,
+                                variables: args.variables,
+                            }];
+                    }
                 }
                 args.jobLog('No profanity_filtered tag found on first audio stream - needs processing');
                 return [2 /*return*/, {

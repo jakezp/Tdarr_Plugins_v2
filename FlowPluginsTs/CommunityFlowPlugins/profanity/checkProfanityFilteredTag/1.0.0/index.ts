@@ -155,13 +155,22 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const firstAudioStream = audioStreams[0];
     
     // Check if the first audio stream has the profanity_filtered tag
-    if (firstAudioStream.tags && firstAudioStream.tags.profanity_filtered === 'true') {
-      args.jobLog('Found profanity_filtered tag on first audio stream - already processed');
-      return {
-        outputFileObj: args.inputFileObj,
-        outputNumber: 1, // Already processed
-        variables: args.variables,
-      };
+    // MKV containers might capitalize the tag as "PROFANITY_FILTERED"
+    if (firstAudioStream.tags) {
+      // Check for the tag in a case-insensitive way
+      const hasProfanityTag = Object.keys(firstAudioStream.tags).some(key =>
+        key.toLowerCase() === 'profanity_filtered' &&
+        firstAudioStream.tags[key].toLowerCase() === 'true'
+      );
+      
+      if (hasProfanityTag) {
+        args.jobLog('Found profanity_filtered tag on first audio stream - already processed');
+        return {
+          outputFileObj: args.inputFileObj,
+          outputNumber: 1, // Already processed
+          variables: args.variables,
+        };
+      }
     }
     
     args.jobLog('No profanity_filtered tag found on first audio stream - needs processing');

@@ -8,8 +8,8 @@ import * as path from 'path';
 
 /* eslint no-plusplus: ["error", { "allowForLoopAfterthoughts": true }] */
 const details = (): IpluginDetails => ({
-  name: 'Update Stream Tags',
-  description: 'Update stream tags and names in the redacted container',
+  name: 'Update Stream Tags and Remux to MKV',
+  description: 'Update stream tags, add profanity_filtered tag, and remux to MKV container to ensure metadata is preserved',
   style: {
     borderColor: '#FF5733', // Orange-red color for profanity-related plugins
   },
@@ -323,14 +323,17 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     
     args.jobLog(`Setting language tags for ${videoStreamIndex} video streams, ${audioStreamIndex} audio streams, and ${subtitleStreamIndex} subtitle streams`);
 
-    // Create a temporary output file
+    // Create a temporary output file - always use MKV container
     const fileDir = path.dirname(filePath);
     const fileName = path.basename(filePath, path.extname(filePath));
-    const fileExt = path.extname(filePath);
-    const outputFilePath = `${fileDir}/${fileName}_tagged${fileExt}`;
+    // Always use MKV extension to ensure metadata is preserved
+    const outputFilePath = `${fileDir}/${fileName}_tagged.mkv`;
+    
+    args.jobLog(`Remuxing to MKV container to ensure metadata tags are preserved`);
 
     // Build the ffmpeg command
     const ffmpegArgs = [
+      '-y',  // Automatically overwrite output files
       '-i', filePath,
       '-map', '0',
       '-c', 'copy',

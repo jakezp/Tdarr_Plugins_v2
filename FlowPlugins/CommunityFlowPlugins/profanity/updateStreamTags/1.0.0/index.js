@@ -73,8 +73,8 @@ var cliUtils_1 = require("../../../../FlowHelpers/1.0.0/cliUtils");
 var path = __importStar(require("path"));
 /* eslint no-plusplus: ["error", { "allowForLoopAfterthoughts": true }] */
 var details = function () { return ({
-    name: 'Update Stream Tags',
-    description: 'Update stream tags and names in the redacted container',
+    name: 'Update Stream Tags and Remux to MKV',
+    description: 'Update stream tags, add profanity_filtered tag, and remux to MKV container to ensure metadata is preserved',
     style: {
         borderColor: '#FF5733', // Orange-red color for profanity-related plugins
     },
@@ -140,7 +140,7 @@ var details = function () { return ({
 exports.details = details;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, redactedAudioTitle_1, originalAudioTitle_1, subtitleTitle_1, defaultLanguage_1, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, fs_1, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, metadataArgs_1, audioStreamIndex_1, subtitleStreamIndex_1, videoStreamIndex_1, originalAudioLanguage_1, originalAudioFound, _i, _a, stream, _b, _c, stream, fileDir, fileName, fileExt, outputFilePath, ffmpegArgs, cli, res, fs, error_2, errorMessage;
+    var lib, redactedAudioTitle_1, originalAudioTitle_1, subtitleTitle_1, defaultLanguage_1, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, fs_1, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, metadataArgs_1, audioStreamIndex_1, subtitleStreamIndex_1, videoStreamIndex_1, originalAudioLanguage_1, originalAudioFound, _i, _a, stream, _b, _c, stream, fileDir, fileName, outputFilePath, ffmpegArgs, cli, res, fs, error_2, errorMessage;
     var _d, _e;
     return __generator(this, function (_f) {
         switch (_f.label) {
@@ -382,9 +382,10 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 args.jobLog("Setting language tags for ".concat(videoStreamIndex_1, " video streams, ").concat(audioStreamIndex_1, " audio streams, and ").concat(subtitleStreamIndex_1, " subtitle streams"));
                 fileDir = path.dirname(filePath);
                 fileName = path.basename(filePath, path.extname(filePath));
-                fileExt = path.extname(filePath);
-                outputFilePath = "".concat(fileDir, "/").concat(fileName, "_tagged").concat(fileExt);
+                outputFilePath = "".concat(fileDir, "/").concat(fileName, "_tagged.mkv");
+                args.jobLog("Remuxing to MKV container to ensure metadata tags are preserved");
                 ffmpegArgs = __spreadArray(__spreadArray([
+                    '-y',
                     '-i', filePath,
                     '-map', '0',
                     '-c', 'copy'
