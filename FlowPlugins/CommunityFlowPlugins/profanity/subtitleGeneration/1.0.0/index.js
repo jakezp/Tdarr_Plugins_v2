@@ -282,10 +282,10 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
             args.jobLog("Subtitle file saved to: ".concat(outputFilePath));
             // Update variables for downstream plugins
             args.variables = __assign(__assign({}, args.variables), { user: __assign(__assign({}, args.variables.user), { subtitlePath: outputFilePath }) });
+            // Return the original input file object, not the SRT file
+            // This ensures the next plugin gets the video file as input, not the SRT file
             return [2 /*return*/, {
-                    outputFileObj: {
-                        _id: outputFilePath,
-                    },
+                    outputFileObj: args.inputFileObj,
                     outputNumber: 1,
                     variables: args.variables,
                 }];

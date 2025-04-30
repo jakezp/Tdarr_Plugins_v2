@@ -282,10 +282,10 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       },
     };
 
+    // Return the original input file object, not the SRT file
+    // This ensures the next plugin gets the video file as input, not the SRT file
     return {
-      outputFileObj: {
-        _id: outputFilePath,
-      },
+      outputFileObj: args.inputFileObj,
       outputNumber: 1, // Success
       variables: args.variables,
     };
