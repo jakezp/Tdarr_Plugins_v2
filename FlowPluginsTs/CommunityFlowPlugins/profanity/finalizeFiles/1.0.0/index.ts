@@ -171,60 +171,86 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     args.jobLog(`Original directory: ${originalDir}`);
 
     // Get the redacted video file path from variables
-    // This is set by the finalAssembly plugin
+    // This could be set by the finalAssembly plugin as redactedVideoPath or finalOutputPath
     let redactedVideoPath = '';
+    
+    // Log all variables for debugging
+    args.jobLog(`Variables: ${JSON.stringify(args.variables?.user || {})}`);
+    
     if (args.variables?.user?.redactedVideoPath) {
       redactedVideoPath = args.variables.user.redactedVideoPath;
-      args.jobLog(`Found redacted video path in variables: ${redactedVideoPath}`);
+      args.jobLog(`Found redactedVideoPath in variables: ${redactedVideoPath}`);
+    } else if (args.variables?.user?.finalOutputPath) {
+      redactedVideoPath = args.variables.user.finalOutputPath;
+      args.jobLog(`Found finalOutputPath in variables: ${redactedVideoPath}`);
+    } else {
+      // Try to find the redacted video file in the working directory
+      const workingDir = path.dirname(args.inputFileObj._id);
+      args.jobLog(`Looking for redacted video in working directory: ${workingDir}`);
+      
+      // Try to find a file with _redacted suffix
+      const files = fs.readdirSync(workingDir);
+      for (const file of files) {
+        if (file.includes('_redacted') &&
+            (file.endsWith('.mkv') || file.endsWith('.mp4'))) {
+          redactedVideoPath = path.join(workingDir, file);
+          args.jobLog(`Found potential redacted video file: ${redactedVideoPath}`);
+          break;
+        }
+      }
     }
 
     // Replace the original file if requested and we have a redacted video path
-    if (replaceOriginalFile && redactedVideoPath) {
-      args.jobLog('Replacing original file with redacted video');
+    if (replaceOriginalFile) {
+      if (redactedVideoPath) {
+        args.jobLog('Replacing original file with redacted video');
 
-      // Check if the redacted video file exists
-      const redactedVideoExists = await fs.promises.access(redactedVideoPath)
-        .then(() => true)
-        .catch(() => false);
+        // Check if the redacted video file exists
+        const redactedVideoExists = await fs.promises.access(redactedVideoPath)
+          .then(() => true)
+          .catch(() => false);
 
-      if (!redactedVideoExists) {
-        args.jobLog(`Redacted video file not found at: ${redactedVideoPath}`);
-      } else {
-        // Use FFmpeg to copy the file to preserve metadata
-        args.jobLog('Using FFmpeg to copy the file with metadata preservation');
-        
-        // Build the FFmpeg command
-        const ffmpegArgs = [
-          '-y',  // Automatically overwrite output files
-          '-i', redactedVideoPath,
-          '-map', '0',
-          '-c', 'copy',
-          originalPath,
-        ];
-
-        args.jobLog(`Executing FFmpeg command to copy file with metadata`);
-        args.jobLog(`FFmpeg arguments: ${ffmpegArgs.join(' ')}`);
-
-        // Execute FFmpeg command
-        const cli = new CLI({
-          cli: args.ffmpegPath,
-          spawnArgs: ffmpegArgs,
-          spawnOpts: {},
-          jobLog: args.jobLog,
-          outputFilePath: originalPath,
-          inputFileObj: args.inputFileObj,
-          logFullCliOutput: args.logFullCliOutput,
-          updateWorker: args.updateWorker,
-          args,
-        });
-
-        const res = await cli.runCli();
-
-        if (res.cliExitCode !== 0) {
-          args.jobLog('FFmpeg file copy failed');
+        if (!redactedVideoExists) {
+          args.jobLog(`Redacted video file not found at: ${redactedVideoPath}`);
         } else {
-          args.jobLog(`Successfully replaced original file with redacted video`);
+          // Use FFmpeg to copy the file to preserve metadata
+          args.jobLog('Using FFmpeg to copy the file with metadata preservation');
+          
+          // Build the FFmpeg command
+          const ffmpegArgs = [
+            '-y',  // Automatically overwrite output files
+            '-i', redactedVideoPath,
+            '-map', '0',
+            '-c', 'copy',
+            originalPath,
+          ];
+
+          args.jobLog(`Executing FFmpeg command to copy file with metadata`);
+          args.jobLog(`FFmpeg arguments: ${ffmpegArgs.join(' ')}`);
+
+          // Execute FFmpeg command
+          const cli = new CLI({
+            cli: args.ffmpegPath,
+            spawnArgs: ffmpegArgs,
+            spawnOpts: {},
+            jobLog: args.jobLog,
+            outputFilePath: originalPath,
+            inputFileObj: args.inputFileObj,
+            logFullCliOutput: args.logFullCliOutput,
+            updateWorker: args.updateWorker,
+            args,
+          });
+
+          const res = await cli.runCli();
+
+          if (res.cliExitCode !== 0) {
+            args.jobLog('FFmpeg file copy failed');
+          } else {
+            args.jobLog(`Successfully replaced original file with redacted video`);
+          }
         }
+      } else {
+        args.jobLog('No redacted video path found, skipping file replacement');
       }
     }
 
