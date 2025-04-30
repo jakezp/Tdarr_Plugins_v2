@@ -202,6 +202,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
 
       // Build the FFmpeg command
       const ffmpegArgs = [
+        '-y',  // Automatically overwrite output files
         '-i', currentPath,
         '-map', '0',
         '-c', 'copy',

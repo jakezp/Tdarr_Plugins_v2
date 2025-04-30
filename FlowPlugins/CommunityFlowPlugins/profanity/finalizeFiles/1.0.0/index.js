@@ -273,6 +273,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 originalFileExists = _c.sent();
                 currentFileIsNotOriginal = originalPath !== currentPath;
                 ffmpegArgs = [
+                    '-y',
                     '-i', currentPath,
                     '-map', '0',
                     '-c', 'copy',
