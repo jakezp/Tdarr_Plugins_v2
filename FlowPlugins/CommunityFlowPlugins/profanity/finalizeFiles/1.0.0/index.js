@@ -67,6 +67,7 @@ var fs_1 = require("fs");
 var fs = __importStar(require("fs"));
 var path = __importStar(require("path"));
 var fileMoveOrCopy_1 = __importDefault(require("../../../../FlowHelpers/1.0.0/fileMoveOrCopy"));
+var cliUtils_1 = require("../../../../FlowHelpers/1.0.0/cliUtils");
 /* eslint no-plusplus: ["error", { "allowForLoopAfterthoughts": true }] */
 var details = function () { return ({
     name: 'Finalize Files',
@@ -219,7 +220,7 @@ function findSrtFilesInWorkingArea(workingDir, maxDepth) {
 }
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, replaceOriginalFile, copySrtFiles, copyOrMoveSrts, currentPath, originalPath, currentDir, originalDir, originalFileName, originalExt, finalPath, tempPath, originalFileExists, currentFileIsNotOriginal, srtFiles, subtitlePath, error_2, tempDir, tempDirFiles, _i, srtFiles_1, srtFile, srtFileName, newSrtFileName, newSrtPath, tempSrtPath, destSrtExists, error_3, error_4, errorMessage;
+    var lib, replaceOriginalFile, copySrtFiles, copyOrMoveSrts, currentPath, originalPath, currentDir, originalDir, originalFileName, originalExt, finalPath, originalFileExists, currentFileIsNotOriginal, ffmpegArgs, cli, res, err_1, srtFiles, subtitlePath, error_2, tempDir, tempDirFiles, _i, srtFiles_1, srtFile, srtFileName, newSrtFileName, newSrtPath, tempSrtPath, destSrtExists, error_3, error_4, errorMessage;
     var _a, _b;
     return __generator(this, function (_c) {
         switch (_c.label) {
@@ -230,7 +231,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 args.jobLog('Starting finalization of files');
                 _c.label = 1;
             case 1:
-                _c.trys.push([1, 26, , 27]);
+                _c.trys.push([1, 27, , 28]);
                 replaceOriginalFile = args.inputs.replaceOriginalFile;
                 copySrtFiles = args.inputs.copySrtFiles;
                 copyOrMoveSrts = args.inputs.copyOrMoveSrts;
@@ -261,89 +262,107 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 args.jobLog("Current directory: ".concat(currentDir));
                 args.jobLog("Original directory: ".concat(originalDir));
                 finalPath = currentPath;
-                if (!replaceOriginalFile) return [3 /*break*/, 7];
+                if (!replaceOriginalFile) return [3 /*break*/, 8];
                 args.jobLog('Replacing original file');
-                tempPath = "".concat(originalPath, ".tmp");
-                // Move the current file to the temporary path
-                return [4 /*yield*/, (0, fileMoveOrCopy_1.default)({
-                        operation: 'move',
-                        sourcePath: currentPath,
-                        destinationPath: tempPath,
-                        args: args,
-                    })];
-            case 2:
-                // Move the current file to the temporary path
-                _c.sent();
+                // Use FFmpeg to copy the file to preserve metadata
+                args.jobLog('Using FFmpeg to copy the file to preserve metadata');
                 return [4 /*yield*/, fs.promises.access(originalPath)
                         .then(function () { return true; })
                         .catch(function () { return false; })];
-            case 3:
+            case 2:
                 originalFileExists = _c.sent();
                 currentFileIsNotOriginal = originalPath !== currentPath;
-                if (!(originalFileExists && currentFileIsNotOriginal)) return [3 /*break*/, 5];
-                args.jobLog("Deleting original file: ".concat(originalPath));
-                return [4 /*yield*/, fs_1.promises.unlink(originalPath)];
-            case 4:
-                _c.sent();
-                _c.label = 5;
-            case 5: 
-            // Move the temporary file to the original path
-            return [4 /*yield*/, (0, fileMoveOrCopy_1.default)({
-                    operation: 'move',
-                    sourcePath: tempPath,
-                    destinationPath: originalPath,
+                ffmpegArgs = [
+                    '-i', currentPath,
+                    '-map', '0',
+                    '-c', 'copy',
+                    originalPath,
+                ];
+                args.jobLog("Executing FFmpeg command to copy file with metadata");
+                args.jobLog("FFmpeg arguments: ".concat(ffmpegArgs.join(' ')));
+                cli = new cliUtils_1.CLI({
+                    cli: args.ffmpegPath,
+                    spawnArgs: ffmpegArgs,
+                    spawnOpts: {},
+                    jobLog: args.jobLog,
+                    outputFilePath: originalPath,
+                    inputFileObj: args.inputFileObj,
+                    logFullCliOutput: args.logFullCliOutput,
+                    updateWorker: args.updateWorker,
                     args: args,
-                })];
-            case 6:
-                // Move the temporary file to the original path
+                });
+                return [4 /*yield*/, cli.runCli()];
+            case 3:
+                res = _c.sent();
+                if (res.cliExitCode !== 0) {
+                    args.jobLog('FFmpeg file copy failed');
+                    return [2 /*return*/, {
+                            outputFileObj: args.inputFileObj,
+                            outputNumber: 2,
+                            variables: args.variables,
+                        }];
+                }
+                if (!currentFileIsNotOriginal) return [3 /*break*/, 7];
+                _c.label = 4;
+            case 4:
+                _c.trys.push([4, 6, , 7]);
+                args.jobLog("Deleting current file: ".concat(currentPath));
+                return [4 /*yield*/, fs_1.promises.unlink(currentPath)];
+            case 5:
                 _c.sent();
-                finalPath = originalPath;
-                _c.label = 7;
+                return [3 /*break*/, 7];
+            case 6:
+                err_1 = _c.sent();
+                args.jobLog("Warning: Could not delete current file: ".concat(err_1));
+                return [3 /*break*/, 7];
             case 7:
-                if (!copySrtFiles) return [3 /*break*/, 25];
-                args.jobLog("".concat(copyOrMoveSrts === 'copy' ? 'Copying' : 'Moving', " SRT files to original directory"));
-                srtFiles = [];
-                if (!((_b = (_a = args.variables) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.subtitlePath)) return [3 /*break*/, 11];
-                subtitlePath = args.variables.user.subtitlePath;
-                args.jobLog("Found subtitle path in variables: ".concat(subtitlePath));
+                finalPath = originalPath;
                 _c.label = 8;
             case 8:
-                _c.trys.push([8, 10, , 11]);
-                return [4 /*yield*/, fs_1.promises.access(subtitlePath, fs.constants.F_OK)];
+                if (!copySrtFiles) return [3 /*break*/, 26];
+                args.jobLog("".concat(copyOrMoveSrts === 'copy' ? 'Copying' : 'Moving', " SRT files to original directory"));
+                srtFiles = [];
+                if (!((_b = (_a = args.variables) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.subtitlePath)) return [3 /*break*/, 12];
+                subtitlePath = args.variables.user.subtitlePath;
+                args.jobLog("Found subtitle path in variables: ".concat(subtitlePath));
+                _c.label = 9;
             case 9:
+                _c.trys.push([9, 11, , 12]);
+                return [4 /*yield*/, fs_1.promises.access(subtitlePath, fs.constants.F_OK)];
+            case 10:
                 _c.sent();
                 args.jobLog("Subtitle file exists at: ".concat(subtitlePath));
                 srtFiles.push(subtitlePath);
-                return [3 /*break*/, 11];
-            case 10:
+                return [3 /*break*/, 12];
+            case 11:
                 error_2 = _c.sent();
                 args.jobLog("Subtitle file not found at: ".concat(subtitlePath, ". Error: ").concat(error_2));
-                return [3 /*break*/, 11];
-            case 11:
-                if (!(srtFiles.length === 0)) return [3 /*break*/, 15];
+                return [3 /*break*/, 12];
+            case 12:
+                if (!(srtFiles.length === 0)) return [3 /*break*/, 16];
                 args.jobLog('Searching for SRT files in working area');
                 tempDir = path.dirname(currentPath);
                 args.jobLog("Checking temp directory: ".concat(tempDir));
                 return [4 /*yield*/, findSrtFiles(tempDir)];
-            case 12:
+            case 13:
                 tempDirFiles = _c.sent();
-                if (!(tempDirFiles.length > 0)) return [3 /*break*/, 13];
+                if (!(tempDirFiles.length > 0)) return [3 /*break*/, 14];
                 args.jobLog("Found ".concat(tempDirFiles.length, " SRT files in temp directory"));
                 srtFiles.push.apply(srtFiles, tempDirFiles);
-                return [3 /*break*/, 15];
-            case 13:
+                return [3 /*break*/, 16];
+            case 14:
                 // If no files found in temp directory, search more broadly
                 args.jobLog('No SRT files found in temp directory, searching more broadly');
                 return [4 /*yield*/, findSrtFilesInWorkingArea(currentDir)];
-            case 14:
-                srtFiles = _c.sent();
-                _c.label = 15;
             case 15:
-                args.jobLog("Found ".concat(srtFiles.length, " SRT files: ").concat(srtFiles.join(', ')));
-                _i = 0, srtFiles_1 = srtFiles;
+                srtFiles = _c.sent();
                 _c.label = 16;
             case 16:
-                if (!(_i < srtFiles_1.length)) return [3 /*break*/, 25];
+                args.jobLog("Found ".concat(srtFiles.length, " SRT files: ").concat(srtFiles.join(', ')));
+                _i = 0, srtFiles_1 = srtFiles;
+                _c.label = 17;
+            case 17:
+                if (!(_i < srtFiles_1.length)) return [3 /*break*/, 26];
                 srtFile = srtFiles_1[_i];
                 srtFileName = path.basename(srtFile);
                 newSrtFileName = "".concat(originalFileName, ".en.srt");
@@ -351,9 +370,9 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 args.jobLog("Using original filename for SRT: ".concat(newSrtFileName));
                 tempSrtPath = "".concat(newSrtPath, ".tmp");
                 args.jobLog("Moving ".concat(srtFile, " to temporary path: ").concat(tempSrtPath));
-                _c.label = 17;
-            case 17:
-                _c.trys.push([17, 23, , 24]);
+                _c.label = 18;
+            case 18:
+                _c.trys.push([18, 24, , 25]);
                 // First move the SRT file to a temporary path
                 return [4 /*yield*/, (0, fileMoveOrCopy_1.default)({
                         operation: 'move',
@@ -361,21 +380,21 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         destinationPath: tempSrtPath,
                         args: args,
                     })];
-            case 18:
+            case 19:
                 // First move the SRT file to a temporary path
                 _c.sent();
                 return [4 /*yield*/, fs.promises.access(newSrtPath)
                         .then(function () { return true; })
                         .catch(function () { return false; })];
-            case 19:
+            case 20:
                 destSrtExists = _c.sent();
-                if (!destSrtExists) return [3 /*break*/, 21];
+                if (!destSrtExists) return [3 /*break*/, 22];
                 args.jobLog("Deleting existing SRT file: ".concat(newSrtPath));
                 return [4 /*yield*/, fs_1.promises.unlink(newSrtPath)];
-            case 20:
+            case 21:
                 _c.sent();
-                _c.label = 21;
-            case 21: 
+                _c.label = 22;
+            case 22: 
             // Move the temporary SRT file to the final path
             return [4 /*yield*/, (0, fileMoveOrCopy_1.default)({
                     operation: 'move',
@@ -383,19 +402,19 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     destinationPath: newSrtPath,
                     args: args,
                 })];
-            case 22:
+            case 23:
                 // Move the temporary SRT file to the final path
                 _c.sent();
                 args.jobLog("Successfully moved SRT file to ".concat(newSrtPath));
-                return [3 /*break*/, 24];
-            case 23:
+                return [3 /*break*/, 25];
+            case 24:
                 error_3 = _c.sent();
                 args.jobLog("Error handling SRT file: ".concat(error_3));
-                return [3 /*break*/, 24];
-            case 24:
-                _i++;
-                return [3 /*break*/, 16];
+                return [3 /*break*/, 25];
             case 25:
+                _i++;
+                return [3 /*break*/, 17];
+            case 26:
                 args.jobLog('Files finalized successfully');
                 return [2 /*return*/, {
                         outputFileObj: {
@@ -404,7 +423,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         outputNumber: 1,
                         variables: args.variables,
                     }];
-            case 26:
+            case 27:
                 error_4 = _c.sent();
                 errorMessage = error_4 instanceof Error ? error_4.message : 'Unknown error';
                 args.jobLog("Error in finalizing files: ".concat(errorMessage));
@@ -413,7 +432,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         outputNumber: 2,
                         variables: args.variables,
                     }];
-            case 27: return [2 /*return*/];
+            case 28: return [2 /*return*/];
         }
     });
 }); };

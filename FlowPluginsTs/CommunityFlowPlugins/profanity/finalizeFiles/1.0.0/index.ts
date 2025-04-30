@@ -2,6 +2,7 @@ import { promises as fsp } from 'fs';
 import * as fs from 'fs';
 import * as path from 'path';
 import fileMoveOrCopy from '../../../../FlowHelpers/1.0.0/fileMoveOrCopy';
+import { CLI } from '../../../../FlowHelpers/1.0.0/cliUtils';
 import {
   getContainer, getFileAbosluteDir, getFileName,
 } from '../../../../FlowHelpers/1.0.0/fileUtils';
@@ -189,17 +190,9 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     if (replaceOriginalFile) {
       args.jobLog('Replacing original file');
 
-      // Create a temporary path
-      const tempPath = `${originalPath}.tmp`;
-
-      // Move the current file to the temporary path
-      await fileMoveOrCopy({
-        operation: 'move', // Use move instead of copy to avoid leaving the _redacted file behind
-        sourcePath: currentPath,
-        destinationPath: tempPath,
-        args,
-      });
-
+      // Use FFmpeg to copy the file to preserve metadata
+      args.jobLog('Using FFmpeg to copy the file to preserve metadata');
+      
       // Check if the original file exists and is different from the current file
       const originalFileExists = await fs.promises.access(originalPath)
         .then(() => true)
@@ -207,19 +200,50 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       
       const currentFileIsNotOriginal = originalPath !== currentPath;
 
-      // Delete the original file if it exists and is different from the current file
-      if (originalFileExists && currentFileIsNotOriginal) {
-        args.jobLog(`Deleting original file: ${originalPath}`);
-        await fsp.unlink(originalPath);
-      }
+      // Build the FFmpeg command
+      const ffmpegArgs = [
+        '-i', currentPath,
+        '-map', '0',
+        '-c', 'copy',
+        originalPath,
+      ];
 
-      // Move the temporary file to the original path
-      await fileMoveOrCopy({
-        operation: 'move',
-        sourcePath: tempPath,
-        destinationPath: originalPath,
+      args.jobLog(`Executing FFmpeg command to copy file with metadata`);
+      args.jobLog(`FFmpeg arguments: ${ffmpegArgs.join(' ')}`);
+
+      // Execute FFmpeg command
+      const cli = new CLI({
+        cli: args.ffmpegPath,
+        spawnArgs: ffmpegArgs,
+        spawnOpts: {},
+        jobLog: args.jobLog,
+        outputFilePath: originalPath,
+        inputFileObj: args.inputFileObj,
+        logFullCliOutput: args.logFullCliOutput,
+        updateWorker: args.updateWorker,
         args,
       });
+
+      const res = await cli.runCli();
+
+      if (res.cliExitCode !== 0) {
+        args.jobLog('FFmpeg file copy failed');
+        return {
+          outputFileObj: args.inputFileObj,
+          outputNumber: 2, // Failed
+          variables: args.variables,
+        };
+      }
+
+      // Delete the current file if it's different from the original
+      if (currentFileIsNotOriginal) {
+        try {
+          args.jobLog(`Deleting current file: ${currentPath}`);
+          await fsp.unlink(currentPath);
+        } catch (err) {
+          args.jobLog(`Warning: Could not delete current file: ${err}`);
+        }
+      }
 
       finalPath = originalPath;
     }
