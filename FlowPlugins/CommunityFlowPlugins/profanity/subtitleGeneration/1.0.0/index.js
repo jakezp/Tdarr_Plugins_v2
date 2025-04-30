@@ -134,10 +134,6 @@ var details = function () { return ({
         },
         {
             number: 2,
-            tooltip: 'Subtitle generation failed',
-        },
-        {
-            number: 3,
             tooltip: 'No transcription data available',
         },
     ],
@@ -240,7 +236,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 args.jobLog('No transcription data available');
                 return [2 /*return*/, {
                         outputFileObj: args.inputFileObj,
-                        outputNumber: 3,
+                        outputNumber: 2,
                         variables: args.variables,
                     }];
             }
@@ -256,11 +252,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
             srtContent = generateSrtContent(transcriptionData, profanitySegments, redactionChar);
             if (!srtContent) {
                 args.jobLog('Failed to generate SRT content');
-                return [2 /*return*/, {
-                        outputFileObj: args.inputFileObj,
-                        outputNumber: 2,
-                        variables: args.variables,
-                    }];
+                throw new Error('Failed to generate SRT content');
             }
             // Determine the output file path
             if (!outputFilePath) {
@@ -268,7 +260,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     videoPath = args.inputFileObj._id;
                     videoDir = path.dirname(videoPath);
                     videoName = path.basename(videoPath, path.extname(videoPath));
-                    outputFilePath = "".concat(videoDir, "/").concat(videoName, "_redacted.srt");
+                    outputFilePath = "".concat(videoDir, "/").concat(videoName, "_redacted.en.srt");
                 }
                 else {
                     audioFilePath = ((_j = (_h = args.variables) === null || _h === void 0 ? void 0 : _h.user) === null || _j === void 0 ? void 0 : _j.centerChannelPath) ||
@@ -277,15 +269,11 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     if (audioFilePath) {
                         audioDir = path.dirname(audioFilePath);
                         audioName = path.basename(audioFilePath, path.extname(audioFilePath));
-                        outputFilePath = "".concat(audioDir, "/").concat(audioName, "_redacted.srt");
+                        outputFilePath = "".concat(audioDir, "/").concat(audioName, "_redacted.en.srt");
                     }
                     else {
                         args.jobLog('No output file path provided and no input file path found');
-                        return [2 /*return*/, {
-                                outputFileObj: args.inputFileObj,
-                                outputNumber: 2,
-                                variables: args.variables,
-                            }];
+                        throw new Error('No output file path provided and no input file path found');
                     }
                 }
             }
@@ -305,11 +293,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
         catch (error) {
             errorMessage = error instanceof Error ? error.message : 'Unknown error';
             args.jobLog("Error in subtitle generation: ".concat(errorMessage));
-            return [2 /*return*/, {
-                    outputFileObj: args.inputFileObj,
-                    outputNumber: 2,
-                    variables: args.variables,
-                }];
+            throw error;
         }
         return [2 /*return*/];
     });

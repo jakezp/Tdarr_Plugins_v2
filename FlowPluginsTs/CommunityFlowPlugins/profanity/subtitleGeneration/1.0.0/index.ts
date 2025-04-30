@@ -58,10 +58,6 @@ const details = (): IpluginDetails => ({
     },
     {
       number: 2,
-      tooltip: 'Subtitle generation failed',
-    },
-    {
-      number: 3,
       tooltip: 'No transcription data available',
     },
   ],
@@ -220,7 +216,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       args.jobLog('No transcription data available');
       return {
         outputFileObj: args.inputFileObj,
-        outputNumber: 3, // No transcription data
+        outputNumber: 2, // No transcription data
         variables: args.variables,
       };
     }
@@ -245,11 +241,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
 
     if (!srtContent) {
       args.jobLog('Failed to generate SRT content');
-      return {
-        outputFileObj: args.inputFileObj,
-        outputNumber: 2, // Failed
-        variables: args.variables,
-      };
+      throw new Error('Failed to generate SRT content');
     }
 
     // Determine the output file path
@@ -259,7 +251,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         const videoPath = args.inputFileObj._id;
         const videoDir = path.dirname(videoPath);
         const videoName = path.basename(videoPath, path.extname(videoPath));
-        outputFilePath = `${videoDir}/${videoName}_redacted.srt`;
+        outputFilePath = `${videoDir}/${videoName}_redacted.en.srt`;
       } else {
         // Save in the same directory as the audio file
         const audioFilePath = args.variables?.user?.centerChannelPath || 
@@ -269,14 +261,10 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         if (audioFilePath) {
           const audioDir = path.dirname(audioFilePath);
           const audioName = path.basename(audioFilePath, path.extname(audioFilePath));
-          outputFilePath = `${audioDir}/${audioName}_redacted.srt`;
+          outputFilePath = `${audioDir}/${audioName}_redacted.en.srt`;
         } else {
           args.jobLog('No output file path provided and no input file path found');
-          return {
-            outputFileObj: args.inputFileObj,
-            outputNumber: 2, // Failed
-            variables: args.variables,
-          };
+          throw new Error('No output file path provided and no input file path found');
         }
       }
     }
@@ -304,11 +292,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     args.jobLog(`Error in subtitle generation: ${errorMessage}`);
-    return {
-      outputFileObj: args.inputFileObj,
-      outputNumber: 2, // Failed
-      variables: args.variables,
-    };
+    throw error;
   }
 };
 
