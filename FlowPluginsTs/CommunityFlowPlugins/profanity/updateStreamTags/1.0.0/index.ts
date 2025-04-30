@@ -375,12 +375,22 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
 
     args.jobLog(`Stream tags updated successfully`);
 
+    // Log all variables for debugging
+    args.jobLog(`Variables before return: ${JSON.stringify(args.variables?.user || {})}`);
+
+    // Set the redactedVideoPath variable for the finalizeFiles plugin
     return {
       outputFileObj: {
         _id: filePath,
       },
       outputNumber: 1, // Success
-      variables: args.variables,
+      variables: {
+        ...args.variables,
+        user: {
+          ...args.variables?.user,
+          redactedVideoPath: filePath,
+        },
+      },
     };
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

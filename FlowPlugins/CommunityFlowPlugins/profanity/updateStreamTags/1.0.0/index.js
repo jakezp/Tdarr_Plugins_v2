@@ -1,4 +1,15 @@
 "use strict";
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -141,17 +152,17 @@ exports.details = details;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
     var lib, redactedAudioTitle_1, originalAudioTitle_1, subtitleTitle_1, defaultLanguage_1, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, fs_1, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, metadataArgs_1, audioStreamIndex_1, subtitleStreamIndex_1, videoStreamIndex_1, originalAudioLanguage_1, originalAudioFound, _i, _a, stream, _b, _c, stream, fileDir, fileName, outputFilePath, ffmpegArgs, cli, res, fs, error_2, errorMessage;
-    var _d, _e;
-    return __generator(this, function (_f) {
-        switch (_f.label) {
+    var _d, _e, _f, _g;
+    return __generator(this, function (_h) {
+        switch (_h.label) {
             case 0:
                 lib = require('../../../../../methods/lib')();
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
                 args.inputs = lib.loadDefaultValues(args.inputs, details);
                 args.jobLog('Starting update of stream tags and names');
-                _f.label = 1;
+                _h.label = 1;
             case 1:
-                _f.trys.push([1, 8, , 9]);
+                _h.trys.push([1, 8, , 9]);
                 redactedAudioTitle_1 = args.inputs.redactedAudioTitle;
                 originalAudioTitle_1 = args.inputs.originalAudioTitle;
                 subtitleTitle_1 = args.inputs.subtitleTitle;
@@ -185,7 +196,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 });
                 return [4 /*yield*/, ffprobeCli.runCli()];
             case 2:
-                ffprobeResult = _f.sent();
+                ffprobeResult = _h.sent();
                 if (ffprobeResult.cliExitCode !== 0) {
                     args.jobLog('Failed to get stream info with ffprobe');
                     return [2 /*return*/, {
@@ -195,9 +206,9 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                         }];
                 }
                 streamInfo = void 0;
-                _f.label = 3;
+                _h.label = 3;
             case 3:
-                _f.trys.push([3, 5, , 6]);
+                _h.trys.push([3, 5, , 6]);
                 fs_1 = require('fs');
                 tempOutputPath = "".concat(path.dirname(filePath), "/ffprobe_output_").concat(Date.now(), ".json");
                 ffprobeFileCmd = [
@@ -220,7 +231,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 });
                 return [4 /*yield*/, ffprobeFileCli.runCli()];
             case 4:
-                _f.sent();
+                _h.sent();
                 // Read the output file
                 if (fs_1.existsSync(tempOutputPath)) {
                     stdoutContent = fs_1.readFileSync(tempOutputPath, 'utf8');
@@ -233,7 +244,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 }
                 return [3 /*break*/, 6];
             case 5:
-                error_1 = _f.sent();
+                error_1 = _h.sent();
                 args.jobLog("Error parsing ffprobe output: ".concat(error_1));
                 return [2 /*return*/, {
                         outputFileObj: args.inputFileObj,
@@ -407,7 +418,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 });
                 return [4 /*yield*/, cli.runCli()];
             case 7:
-                res = _f.sent();
+                res = _h.sent();
                 if (res.cliExitCode !== 0) {
                     args.jobLog('FFmpeg stream tag update failed');
                     return [2 /*return*/, {
@@ -420,15 +431,18 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 fs.unlinkSync(filePath);
                 fs.renameSync(outputFilePath, filePath);
                 args.jobLog("Stream tags updated successfully");
+                // Log all variables for debugging
+                args.jobLog("Variables before return: ".concat(JSON.stringify(((_f = args.variables) === null || _f === void 0 ? void 0 : _f.user) || {})));
+                // Set the redactedVideoPath variable for the finalizeFiles plugin
                 return [2 /*return*/, {
                         outputFileObj: {
                             _id: filePath,
                         },
                         outputNumber: 1,
-                        variables: args.variables,
+                        variables: __assign(__assign({}, args.variables), { user: __assign(__assign({}, (_g = args.variables) === null || _g === void 0 ? void 0 : _g.user), { redactedVideoPath: filePath }) }),
                     }];
             case 8:
-                error_2 = _f.sent();
+                error_2 = _h.sent();
                 errorMessage = error_2 instanceof Error ? error_2.message : 'Unknown error';
                 args.jobLog("Error in updating stream tags: ".concat(errorMessage));
                 return [2 /*return*/, {
