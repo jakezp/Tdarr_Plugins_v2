@@ -171,7 +171,8 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         // Rename if needed
         if (renameToMatchOriginal) {
           const ext = path.extname(subtitleFileName);
-          destFileName = `${originalFileName}${ext}`;
+          // Add language code 'en' for English
+          destFileName = `${originalFileName}.en${ext}`;
         }
         
         const destinationPath = path.join(originalDir, destFileName);

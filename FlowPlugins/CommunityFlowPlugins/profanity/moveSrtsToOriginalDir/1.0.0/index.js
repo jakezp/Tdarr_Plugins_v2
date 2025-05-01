@@ -229,7 +229,8 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 // Rename if needed
                 if (renameToMatchOriginal_1) {
                     ext = path.extname(subtitleFileName);
-                    destFileName = "".concat(originalFileName_1).concat(ext);
+                    // Add language code 'en' for English
+                    destFileName = "".concat(originalFileName_1, ".en").concat(ext);
                 }
                 destinationPath = path.join(originalDir_1, destFileName);
                 return [4 /*yield*/, doOperation({
