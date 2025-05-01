@@ -151,7 +151,7 @@ var details = function () { return ({
 exports.details = details;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, redactedAudioTitle_1, originalAudioTitle_1, subtitleTitle_1, defaultLanguage_1, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, fs_1, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, metadataArgs_1, audioStreamIndex_1, subtitleStreamIndex_1, videoStreamIndex_1, originalAudioLanguage_1, originalAudioFound, _i, _a, stream, _b, _c, stream, fileDir, fileName, outputFilePath, ffmpegArgs, cli, res, fs, error_2, errorMessage;
+    var lib, redactedAudioTitle_1, originalAudioTitle_1, subtitleTitle_1, defaultLanguage_1, filePath, ffprobeCmd, ffprobeCli, ffprobeResult, streamInfo, fs, tempOutputPath, ffprobeFileCmd, ffprobeFileCli, stdoutContent, error_1, metadataArgs_1, audioStreamIndex_1, subtitleStreamIndex_1, videoStreamIndex_1, originalAudioLanguage_1, originalAudioFound, _i, _a, stream, _b, _c, stream, fileDir, fileName, outputFilePath, ffmpegArgs, cli, res, error_2, errorMessage;
     var _d, _e, _f, _g;
     return __generator(this, function (_h) {
         switch (_h.label) {
@@ -209,7 +209,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 _h.label = 3;
             case 3:
                 _h.trys.push([3, 5, , 6]);
-                fs_1 = require('fs');
+                fs = require('fs');
                 tempOutputPath = "".concat(path.dirname(filePath), "/ffprobe_output_").concat(Date.now(), ".json");
                 ffprobeFileCmd = [
                     '-v', 'quiet',
@@ -233,11 +233,11 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
             case 4:
                 _h.sent();
                 // Read the output file
-                if (fs_1.existsSync(tempOutputPath)) {
-                    stdoutContent = fs_1.readFileSync(tempOutputPath, 'utf8');
+                if (fs.existsSync(tempOutputPath)) {
+                    stdoutContent = fs.readFileSync(tempOutputPath, 'utf8');
                     streamInfo = JSON.parse(stdoutContent);
                     // Clean up the temporary file
-                    fs_1.unlinkSync(tempOutputPath);
+                    fs.unlinkSync(tempOutputPath);
                 }
                 else {
                     throw new Error('Failed to get ffprobe output');
@@ -395,6 +395,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 fileName = path.basename(filePath, path.extname(filePath));
                 outputFilePath = "".concat(fileDir, "/").concat(fileName, "_tagged.mkv");
                 args.jobLog("Remuxing to MKV container to ensure metadata tags are preserved");
+                args.jobLog("Output file path: ".concat(outputFilePath));
                 ffmpegArgs = __spreadArray(__spreadArray([
                     '-y',
                     '-i', filePath,
@@ -427,19 +428,18 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                             variables: args.variables,
                         }];
                 }
-                fs = require('fs');
-                fs.unlinkSync(filePath);
-                fs.renameSync(outputFilePath, filePath);
+                // Keep the tagged file as a separate file (don't replace the original)
                 args.jobLog("Stream tags updated successfully");
+                args.jobLog("Tagged file created at: ".concat(outputFilePath));
                 // Log all variables for debugging
                 args.jobLog("Variables before return: ".concat(JSON.stringify(((_f = args.variables) === null || _f === void 0 ? void 0 : _f.user) || {})));
-                // Set the redactedVideoPath variable for the finalizeFiles plugin
+                // Set the redactedVideoPath variable to the tagged file path
                 return [2 /*return*/, {
                         outputFileObj: {
-                            _id: filePath,
+                            _id: outputFilePath, // Use the tagged file as the output
                         },
                         outputNumber: 1,
-                        variables: __assign(__assign({}, args.variables), { user: __assign(__assign({}, (_g = args.variables) === null || _g === void 0 ? void 0 : _g.user), { redactedVideoPath: filePath }) }),
+                        variables: __assign(__assign({}, args.variables), { user: __assign(__assign({}, (_g = args.variables) === null || _g === void 0 ? void 0 : _g.user), { redactedVideoPath: outputFilePath }) }),
                     }];
             case 8:
                 error_2 = _h.sent();

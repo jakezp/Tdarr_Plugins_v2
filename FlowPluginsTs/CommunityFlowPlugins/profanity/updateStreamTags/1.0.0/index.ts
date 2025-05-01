@@ -323,13 +323,14 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     
     args.jobLog(`Setting language tags for ${videoStreamIndex} video streams, ${audioStreamIndex} audio streams, and ${subtitleStreamIndex} subtitle streams`);
 
-    // Create a temporary output file - always use MKV container
+    // Create an output file with _tagged suffix - always use MKV container
     const fileDir = path.dirname(filePath);
     const fileName = path.basename(filePath, path.extname(filePath));
     // Always use MKV extension to ensure metadata is preserved
     const outputFilePath = `${fileDir}/${fileName}_tagged.mkv`;
     
     args.jobLog(`Remuxing to MKV container to ensure metadata tags are preserved`);
+    args.jobLog(`Output file path: ${outputFilePath}`);
 
     // Build the ffmpeg command
     const ffmpegArgs = [
@@ -368,27 +369,24 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       };
     }
 
-    // Replace the original file with the tagged file
-    const fs = require('fs');
-    fs.unlinkSync(filePath);
-    fs.renameSync(outputFilePath, filePath);
-
+    // Keep the tagged file as a separate file (don't replace the original)
     args.jobLog(`Stream tags updated successfully`);
+    args.jobLog(`Tagged file created at: ${outputFilePath}`);
 
     // Log all variables for debugging
     args.jobLog(`Variables before return: ${JSON.stringify(args.variables?.user || {})}`);
 
-    // Set the redactedVideoPath variable for the finalizeFiles plugin
+    // Set the redactedVideoPath variable to the tagged file path
     return {
       outputFileObj: {
-        _id: filePath,
+        _id: outputFilePath, // Use the tagged file as the output
       },
       outputNumber: 1, // Success
       variables: {
         ...args.variables,
         user: {
           ...args.variables?.user,
-          redactedVideoPath: filePath,
+          redactedVideoPath: outputFilePath, // Point to the tagged file
         },
       },
     };
