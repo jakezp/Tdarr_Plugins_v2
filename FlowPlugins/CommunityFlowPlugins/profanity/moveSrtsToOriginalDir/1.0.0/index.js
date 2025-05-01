@@ -186,16 +186,17 @@ var doOperation = function (_a) {
 };
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, fileExtensions_1, renameToMatchOriginal_1, originalPath, originalDir_1, originalFileName_1, workingDir_1, allFiles, error_2, subtitleFiles, filesInDir, i, error_3, errorMessage;
-    return __generator(this, function (_a) {
-        switch (_a.label) {
+    var lib, fileExtensions_1, renameToMatchOriginal_1, originalPath, originalDir_1, originalFileName_1, subtitlePath, subtitleDir, subtitleExists, subtitleFileName, destFileName, ext, destinationPath, workingDir_1, tempDir_1, allFiles, workingDirFiles, tempDirFiles, error_2, error_3, subtitleFiles, filesInDir, i, error_4, errorMessage;
+    var _a, _b, _c, _d;
+    return __generator(this, function (_e) {
+        switch (_e.label) {
             case 0:
                 lib = require('../../../../../methods/lib')();
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-param-reassign
                 args.inputs = lib.loadDefaultValues(args.inputs, details);
-                _a.label = 1;
+                _e.label = 1;
             case 1:
-                _a.trys.push([1, 10, , 11]);
+                _e.trys.push([1, 18, , 19]);
                 fileExtensions_1 = String(args.inputs.fileExtensions).split(',').map(function (row) { return row.trim(); });
                 renameToMatchOriginal_1 = args.inputs.renameToMatchOriginal;
                 originalPath = args.originalLibraryFile._id;
@@ -211,37 +212,93 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 originalFileName_1 = path.basename(originalPath, path.extname(originalPath));
                 args.jobLog("Original file: ".concat(originalPath));
                 args.jobLog("Original directory: ".concat(originalDir_1));
-                workingDir_1 = (0, fileUtils_1.getFileAbosluteDir)(args.inputFileObj._id);
-                args.jobLog("Working directory: ".concat(workingDir_1));
-                allFiles = [];
-                _a.label = 2;
+                subtitlePath = (_b = (_a = args.variables) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.subtitlePath;
+                if (!subtitlePath) return [3 /*break*/, 5];
+                args.jobLog("Found subtitle path in variables: ".concat(subtitlePath));
+                subtitleDir = path.dirname(subtitlePath);
+                args.jobLog("Subtitle directory: ".concat(subtitleDir));
+                return [4 /*yield*/, fs_1.promises.access(subtitlePath)
+                        .then(function () { return true; })
+                        .catch(function () { return false; })];
             case 2:
-                _a.trys.push([2, 4, , 5]);
-                return [4 /*yield*/, fs_1.promises.readdir(workingDir_1)];
+                subtitleExists = _e.sent();
+                if (!subtitleExists) return [3 /*break*/, 4];
+                args.jobLog("Subtitle file exists: ".concat(subtitlePath));
+                subtitleFileName = path.basename(subtitlePath);
+                destFileName = subtitleFileName;
+                // Rename if needed
+                if (renameToMatchOriginal_1) {
+                    ext = path.extname(subtitleFileName);
+                    destFileName = "".concat(originalFileName_1).concat(ext);
+                }
+                destinationPath = path.join(originalDir_1, destFileName);
+                return [4 /*yield*/, doOperation({
+                        args: args,
+                        sourcePath: subtitlePath,
+                        destinationPath: destinationPath,
+                    })];
             case 3:
-                allFiles = _a.sent();
-                args.jobLog("Found ".concat(allFiles.length, " files in working directory: ").concat(allFiles.join(', ')));
-                return [3 /*break*/, 5];
-            case 4:
-                error_2 = _a.sent();
-                args.jobLog("Error reading working directory: ".concat(error_2));
+                _e.sent();
                 return [2 /*return*/, {
                         outputFileObj: args.inputFileObj,
                         outputNumber: 1,
                         variables: args.variables,
                     }];
+            case 4:
+                args.jobLog("Subtitle file does not exist: ".concat(subtitlePath));
+                _e.label = 5;
             case 5:
+                workingDir_1 = (0, fileUtils_1.getFileAbosluteDir)(args.inputFileObj._id);
+                args.jobLog("Working directory: ".concat(workingDir_1));
+                tempDir_1 = path.dirname(((_d = (_c = args.variables) === null || _c === void 0 ? void 0 : _c.user) === null || _d === void 0 ? void 0 : _d.audioFilePath) || '');
+                if (tempDir_1 && tempDir_1 !== '.' && tempDir_1 !== workingDir_1) {
+                    args.jobLog("Checking temp directory: ".concat(tempDir_1));
+                }
+                allFiles = [];
+                _e.label = 6;
+            case 6:
+                _e.trys.push([6, 12, , 13]);
+                return [4 /*yield*/, fs_1.promises.readdir(workingDir_1)];
+            case 7:
+                workingDirFiles = _e.sent();
+                allFiles.push.apply(allFiles, workingDirFiles.map(function (file) { return path.join(workingDir_1, file); }));
+                if (!(tempDir_1 && tempDir_1 !== '.' && tempDir_1 !== workingDir_1)) return [3 /*break*/, 11];
+                _e.label = 8;
+            case 8:
+                _e.trys.push([8, 10, , 11]);
+                return [4 /*yield*/, fs_1.promises.readdir(tempDir_1)];
+            case 9:
+                tempDirFiles = _e.sent();
+                allFiles.push.apply(allFiles, tempDirFiles.map(function (file) { return path.join(tempDir_1, file); }));
+                args.jobLog("Found ".concat(tempDirFiles.length, " files in temp directory"));
+                return [3 /*break*/, 11];
+            case 10:
+                error_2 = _e.sent();
+                args.jobLog("Error reading temp directory: ".concat(error_2));
+                return [3 /*break*/, 11];
+            case 11:
+                args.jobLog("Found ".concat(allFiles.length, " total files to check"));
+                return [3 /*break*/, 13];
+            case 12:
+                error_3 = _e.sent();
+                args.jobLog("Error reading directories: ".concat(error_3));
+                return [2 /*return*/, {
+                        outputFileObj: args.inputFileObj,
+                        outputNumber: 1,
+                        variables: args.variables,
+                    }];
+            case 13:
                 subtitleFiles = allFiles.filter(function (file) {
                     var ext = path.extname(file).toLowerCase().substring(1); // Remove the dot
                     return fileExtensions_1.includes(ext);
                 });
                 args.jobLog("Found ".concat(subtitleFiles.length, " subtitle files: ").concat(subtitleFiles.join(', ')));
-                filesInDir = subtitleFiles.map(function (file) {
-                    var sourcePath = path.join(workingDir_1, file);
-                    var destFileName = file;
+                filesInDir = subtitleFiles.map(function (sourcePath) {
+                    var fileName = path.basename(sourcePath);
+                    var destFileName = fileName;
                     // Rename if needed
                     if (renameToMatchOriginal_1) {
-                        var ext = path.extname(file);
+                        var ext = path.extname(fileName);
                         destFileName = "".concat(originalFileName_1).concat(ext);
                     }
                     var destinationPath = path.join(originalDir_1, destFileName);
@@ -253,37 +310,37 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     .filter(function (row) { return row.source !== args.originalLibraryFile._id && row.source !== args.inputFileObj._id; });
                 args.jobLog("Found ".concat(filesInDir.length, " subtitle files to move"));
                 i = 0;
-                _a.label = 6;
-            case 6:
-                if (!(i < filesInDir.length)) return [3 /*break*/, 9];
+                _e.label = 14;
+            case 14:
+                if (!(i < filesInDir.length)) return [3 /*break*/, 17];
                 // eslint-disable-next-line no-await-in-loop
                 return [4 /*yield*/, doOperation({
                         args: args,
                         sourcePath: filesInDir[i].source,
                         destinationPath: filesInDir[i].destination,
                     })];
-            case 7:
+            case 15:
                 // eslint-disable-next-line no-await-in-loop
-                _a.sent();
-                _a.label = 8;
-            case 8:
+                _e.sent();
+                _e.label = 16;
+            case 16:
                 i += 1;
-                return [3 /*break*/, 6];
-            case 9: return [2 /*return*/, {
+                return [3 /*break*/, 14];
+            case 17: return [2 /*return*/, {
                     outputFileObj: args.inputFileObj,
                     outputNumber: 1,
                     variables: args.variables,
                 }];
-            case 10:
-                error_3 = _a.sent();
-                errorMessage = error_3 instanceof Error ? error_3.message : 'Unknown error';
+            case 18:
+                error_4 = _e.sent();
+                errorMessage = error_4 instanceof Error ? error_4.message : 'Unknown error';
                 args.jobLog("Error moving subtitle files: ".concat(errorMessage));
                 return [2 /*return*/, {
                         outputFileObj: args.inputFileObj,
                         outputNumber: 1,
                         variables: args.variables,
                     }];
-            case 11: return [2 /*return*/];
+            case 19: return [2 /*return*/];
         }
     });
 }); };

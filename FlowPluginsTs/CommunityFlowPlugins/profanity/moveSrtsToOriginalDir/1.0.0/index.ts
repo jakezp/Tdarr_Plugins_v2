@@ -147,17 +147,84 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     args.jobLog(`Original file: ${originalPath}`);
     args.jobLog(`Original directory: ${originalDir}`);
 
-    // Get the working directory - this is where the SRT files should be
+    // First check if we have a subtitle path in the variables
+    let subtitlePath = args.variables?.user?.subtitlePath;
+    if (subtitlePath) {
+      args.jobLog(`Found subtitle path in variables: ${subtitlePath}`);
+      
+      // Get the directory of the subtitle file
+      const subtitleDir = path.dirname(subtitlePath);
+      args.jobLog(`Subtitle directory: ${subtitleDir}`);
+      
+      // Check if the subtitle file exists
+      const subtitleExists = await fsp.access(subtitlePath)
+        .then(() => true)
+        .catch(() => false);
+      
+      if (subtitleExists) {
+        args.jobLog(`Subtitle file exists: ${subtitlePath}`);
+        
+        // Move this specific subtitle file
+        const subtitleFileName = path.basename(subtitlePath);
+        let destFileName = subtitleFileName;
+        
+        // Rename if needed
+        if (renameToMatchOriginal) {
+          const ext = path.extname(subtitleFileName);
+          destFileName = `${originalFileName}${ext}`;
+        }
+        
+        const destinationPath = path.join(originalDir, destFileName);
+        
+        await doOperation({
+          args,
+          sourcePath: subtitlePath,
+          destinationPath,
+        });
+        
+        return {
+          outputFileObj: args.inputFileObj,
+          outputNumber: 1,
+          variables: args.variables,
+        };
+      } else {
+        args.jobLog(`Subtitle file does not exist: ${subtitlePath}`);
+      }
+    }
+    
+    // If we didn't find a subtitle file from variables, look in the working directory
+    // and the temp directory where the SRT files might be created
     const workingDir = getFileAbosluteDir(args.inputFileObj._id);
     args.jobLog(`Working directory: ${workingDir}`);
-
+    
+    // Also check the temp directory where the SRT files might be created
+    // This is typically a directory like /temp/tdarr-workDir2-XXXXXXX/YYYYYYY/
+    const tempDir = path.dirname(args.variables?.user?.audioFilePath || '');
+    if (tempDir && tempDir !== '.' && tempDir !== workingDir) {
+      args.jobLog(`Checking temp directory: ${tempDir}`);
+    }
+    
     // Find all files in the working directory
     let allFiles: string[] = [];
     try {
-      allFiles = await fsp.readdir(workingDir);
-      args.jobLog(`Found ${allFiles.length} files in working directory: ${allFiles.join(', ')}`);
+      // Check working directory
+      const workingDirFiles = await fsp.readdir(workingDir);
+      allFiles.push(...workingDirFiles.map(file => path.join(workingDir, file)));
+      
+      // Check temp directory if it exists and is different from working directory
+      if (tempDir && tempDir !== '.' && tempDir !== workingDir) {
+        try {
+          const tempDirFiles = await fsp.readdir(tempDir);
+          allFiles.push(...tempDirFiles.map(file => path.join(tempDir, file)));
+          args.jobLog(`Found ${tempDirFiles.length} files in temp directory`);
+        } catch (error) {
+          args.jobLog(`Error reading temp directory: ${error}`);
+        }
+      }
+      
+      args.jobLog(`Found ${allFiles.length} total files to check`);
     } catch (error) {
-      args.jobLog(`Error reading working directory: ${error}`);
+      args.jobLog(`Error reading directories: ${error}`);
       return {
         outputFileObj: args.inputFileObj,
         outputNumber: 1,
@@ -174,13 +241,13 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     args.jobLog(`Found ${subtitleFiles.length} subtitle files: ${subtitleFiles.join(', ')}`);
 
     // Map to source and destination paths
-    const filesInDir = subtitleFiles.map((file) => {
-      const sourcePath = path.join(workingDir, file);
-      let destFileName = file;
+    const filesInDir = subtitleFiles.map((sourcePath) => {
+      const fileName = path.basename(sourcePath);
+      let destFileName = fileName;
       
       // Rename if needed
       if (renameToMatchOriginal) {
-        const ext = path.extname(file);
+        const ext = path.extname(fileName);
         destFileName = `${originalFileName}${ext}`;
       }
       
