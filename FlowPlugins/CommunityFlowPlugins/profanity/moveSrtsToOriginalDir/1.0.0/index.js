@@ -186,7 +186,7 @@ var doOperation = function (_a) {
 };
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, fileExtensions_1, renameToMatchOriginal_1, originalPath, originalDir_1, originalFileName_1, subtitlePath, subtitleDir, subtitleExists, subtitleFileName, destFileName, ext, destinationPath, workingDir_1, tempDir_1, allFiles, workingDirFiles, tempDirFiles, error_2, error_3, subtitleFiles, filesInDir, i, error_4, errorMessage;
+    var lib, fileExtensions_1, renameToMatchOriginal_1, originalPath, originalDir_1, originalFileName_1, subtitlePath, subtitleDir, subtitleExists, subtitleFileName, destFileName, fileNameWithoutExt, ext, destinationPath, workingDir_1, tempDir_1, allFiles, workingDirFiles, tempDirFiles, error_2, error_3, subtitleFiles, filesInDir, i, error_4, errorMessage;
     var _a, _b, _c, _d;
     return __generator(this, function (_e) {
         switch (_e.label) {
@@ -228,9 +228,18 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 destFileName = subtitleFileName;
                 // Rename if needed
                 if (renameToMatchOriginal_1) {
+                    fileNameWithoutExt = path.basename(subtitleFileName, path.extname(subtitleFileName));
                     ext = path.extname(subtitleFileName);
-                    // Add language code 'en' for English
-                    destFileName = "".concat(originalFileName_1, ".en").concat(ext);
+                    // If the file already has a language code (e.g., .en.srt), preserve it
+                    if (fileNameWithoutExt.endsWith('.en')) {
+                        args.jobLog("Subtitle file already has language code: ".concat(subtitleFileName));
+                        destFileName = "".concat(originalFileName_1, ".en").concat(ext);
+                    }
+                    else {
+                        // Add language code 'en' for English
+                        args.jobLog("Adding language code to subtitle file: ".concat(subtitleFileName));
+                        destFileName = "".concat(originalFileName_1, ".en").concat(ext);
+                    }
                 }
                 destinationPath = path.join(originalDir_1, destFileName);
                 return [4 /*yield*/, doOperation({
@@ -299,9 +308,19 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                     var destFileName = fileName;
                     // Rename if needed
                     if (renameToMatchOriginal_1) {
+                        // Check if the file already has a language code
+                        var fileNameWithoutExt = path.basename(fileName, path.extname(fileName));
                         var ext = path.extname(fileName);
-                        // Add language code 'en' for English
-                        destFileName = "".concat(originalFileName_1, ".en").concat(ext);
+                        // If the file already has a language code (e.g., .en.srt), preserve it
+                        if (fileNameWithoutExt.endsWith('.en')) {
+                            args.jobLog("Subtitle file already has language code: ".concat(fileName));
+                            destFileName = "".concat(originalFileName_1, ".en").concat(ext);
+                        }
+                        else {
+                            // Add language code 'en' for English
+                            args.jobLog("Adding language code to subtitle file: ".concat(fileName));
+                            destFileName = "".concat(originalFileName_1, ".en").concat(ext);
+                        }
                     }
                     var destinationPath = path.join(originalDir_1, destFileName);
                     return {

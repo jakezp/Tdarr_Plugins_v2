@@ -170,9 +170,19 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         
         // Rename if needed
         if (renameToMatchOriginal) {
+          // Check if the file already has a language code
+          const fileNameWithoutExt = path.basename(subtitleFileName, path.extname(subtitleFileName));
           const ext = path.extname(subtitleFileName);
-          // Add language code 'en' for English
-          destFileName = `${originalFileName}.en${ext}`;
+          
+          // If the file already has a language code (e.g., .en.srt), preserve it
+          if (fileNameWithoutExt.endsWith('.en')) {
+            args.jobLog(`Subtitle file already has language code: ${subtitleFileName}`);
+            destFileName = `${originalFileName}.en${ext}`;
+          } else {
+            // Add language code 'en' for English
+            args.jobLog(`Adding language code to subtitle file: ${subtitleFileName}`);
+            destFileName = `${originalFileName}.en${ext}`;
+          }
         }
         
         const destinationPath = path.join(originalDir, destFileName);
@@ -248,9 +258,19 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
       
       // Rename if needed
       if (renameToMatchOriginal) {
+        // Check if the file already has a language code
+        const fileNameWithoutExt = path.basename(fileName, path.extname(fileName));
         const ext = path.extname(fileName);
-        // Add language code 'en' for English
-        destFileName = `${originalFileName}.en${ext}`;
+        
+        // If the file already has a language code (e.g., .en.srt), preserve it
+        if (fileNameWithoutExt.endsWith('.en')) {
+          args.jobLog(`Subtitle file already has language code: ${fileName}`);
+          destFileName = `${originalFileName}.en${ext}`;
+        } else {
+          // Add language code 'en' for English
+          args.jobLog(`Adding language code to subtitle file: ${fileName}`);
+          destFileName = `${originalFileName}.en${ext}`;
+        }
       }
       
       const destinationPath = path.join(originalDir, destFileName);
