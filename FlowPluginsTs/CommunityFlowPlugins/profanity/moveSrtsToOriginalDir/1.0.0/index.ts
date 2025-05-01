@@ -69,15 +69,54 @@ const doOperation = async ({
 
   if (sourcePath === destinationPath) {
     args.jobLog('Input and output path are the same, skipping move');
-  } else {
-    args.deps.fsextra.ensureDirSync(getFileAbosluteDir(destinationPath));
+    return;
+  }
 
-    await fileMoveOrCopy({
-      operation: 'move',
-      sourcePath,
-      destinationPath,
-      args,
-    });
+  try {
+    // Check if destination file already exists
+    const destExists = await fsp.access(destinationPath)
+      .then(() => true)
+      .catch(() => false);
+
+    if (destExists) {
+      args.jobLog(`Destination file already exists: ${destinationPath}`);
+      
+      // Create a temporary file path
+      const tempPath = `${destinationPath}.tmp`;
+      
+      // First copy to temp file
+      await fileMoveOrCopy({
+        operation: 'copy',
+        sourcePath,
+        destinationPath: tempPath,
+        args,
+      });
+      
+      // Delete existing file
+      args.jobLog(`Deleting existing file: ${destinationPath}`);
+      await fsp.unlink(destinationPath);
+      
+      // Rename temp file to final name
+      args.jobLog(`Renaming temp file to final name`);
+      await fsp.rename(tempPath, destinationPath);
+      
+      // Delete source file since we're doing a move operation
+      args.jobLog(`Deleting source file: ${sourcePath}`);
+      await fsp.unlink(sourcePath);
+    } else {
+      // Ensure the destination directory exists
+      args.deps.fsextra.ensureDirSync(getFileAbosluteDir(destinationPath));
+      
+      // Move the file directly
+      await fileMoveOrCopy({
+        operation: 'move',
+        sourcePath,
+        destinationPath,
+        args,
+      });
+    }
+  } catch (error) {
+    args.jobLog(`Error moving file: ${error}`);
   }
 };
 
@@ -108,32 +147,51 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     args.jobLog(`Original file: ${originalPath}`);
     args.jobLog(`Original directory: ${originalDir}`);
 
-    // Get the working directory
+    // Get the working directory - this is where the SRT files should be
     const workingDir = getFileAbosluteDir(args.inputFileObj._id);
     args.jobLog(`Working directory: ${workingDir}`);
 
-    // Find subtitle files in the working directory
-    const filesInDir = (await fsp.readdir(workingDir))
-      .map((row) => ({
-        source: `${workingDir}/${row}`,
-        destination: renameToMatchOriginal
-          ? normJoinPath({
-              upath: args.deps.upath,
-              paths: [
-                originalDir,
-                `${originalFileName}.${getContainer(row)}`,
-              ],
-            })
-          : normJoinPath({
-              upath: args.deps.upath,
-              paths: [
-                originalDir,
-                row,
-              ],
-            }),
-      }))
-      .filter((row) => row.source !== args.originalLibraryFile._id && row.source !== args.inputFileObj._id)
-      .filter((row) => fileExtensions.includes(getContainer(row.source)));
+    // Find all files in the working directory
+    let allFiles: string[] = [];
+    try {
+      allFiles = await fsp.readdir(workingDir);
+      args.jobLog(`Found ${allFiles.length} files in working directory: ${allFiles.join(', ')}`);
+    } catch (error) {
+      args.jobLog(`Error reading working directory: ${error}`);
+      return {
+        outputFileObj: args.inputFileObj,
+        outputNumber: 1,
+        variables: args.variables,
+      };
+    }
+
+    // Filter for subtitle files
+    const subtitleFiles = allFiles.filter(file => {
+      const ext = path.extname(file).toLowerCase().substring(1); // Remove the dot
+      return fileExtensions.includes(ext);
+    });
+
+    args.jobLog(`Found ${subtitleFiles.length} subtitle files: ${subtitleFiles.join(', ')}`);
+
+    // Map to source and destination paths
+    const filesInDir = subtitleFiles.map((file) => {
+      const sourcePath = path.join(workingDir, file);
+      let destFileName = file;
+      
+      // Rename if needed
+      if (renameToMatchOriginal) {
+        const ext = path.extname(file);
+        destFileName = `${originalFileName}${ext}`;
+      }
+      
+      const destinationPath = path.join(originalDir, destFileName);
+      
+      return {
+        source: sourcePath,
+        destination: destinationPath,
+      };
+    })
+    .filter((row) => row.source !== args.originalLibraryFile._id && row.source !== args.inputFileObj._id);
 
     args.jobLog(`Found ${filesInDir.length} subtitle files to move`);
 

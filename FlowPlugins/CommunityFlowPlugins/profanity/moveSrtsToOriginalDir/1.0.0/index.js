@@ -65,7 +65,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.plugin = exports.details = void 0;
 var fs_1 = require("fs");
 var fileUtils_1 = require("../../../../FlowHelpers/1.0.0/fileUtils");
-var normJoinPath_1 = __importDefault(require("../../../../FlowHelpers/1.0.0/normJoinPath"));
 var fileMoveOrCopy_1 = __importDefault(require("../../../../FlowHelpers/1.0.0/fileMoveOrCopy"));
 var path = __importStar(require("path"));
 /* eslint no-plusplus: ["error", { "allowForLoopAfterthoughts": true }] */
@@ -114,33 +113,80 @@ exports.details = details;
 var doOperation = function (_a) {
     var args = _a.args, sourcePath = _a.sourcePath, destinationPath = _a.destinationPath;
     return __awaiter(void 0, void 0, void 0, function () {
+        var destExists, tempPath, error_1;
         return __generator(this, function (_b) {
             switch (_b.label) {
                 case 0:
                     args.jobLog("Input path: ".concat(sourcePath));
                     args.jobLog("Output path: ".concat(destinationPath));
-                    if (!(sourcePath === destinationPath)) return [3 /*break*/, 1];
-                    args.jobLog('Input and output path are the same, skipping move');
-                    return [3 /*break*/, 3];
+                    if (sourcePath === destinationPath) {
+                        args.jobLog('Input and output path are the same, skipping move');
+                        return [2 /*return*/];
+                    }
+                    _b.label = 1;
                 case 1:
+                    _b.trys.push([1, 10, , 11]);
+                    return [4 /*yield*/, fs_1.promises.access(destinationPath)
+                            .then(function () { return true; })
+                            .catch(function () { return false; })];
+                case 2:
+                    destExists = _b.sent();
+                    if (!destExists) return [3 /*break*/, 7];
+                    args.jobLog("Destination file already exists: ".concat(destinationPath));
+                    tempPath = "".concat(destinationPath, ".tmp");
+                    // First copy to temp file
+                    return [4 /*yield*/, (0, fileMoveOrCopy_1.default)({
+                            operation: 'copy',
+                            sourcePath: sourcePath,
+                            destinationPath: tempPath,
+                            args: args,
+                        })];
+                case 3:
+                    // First copy to temp file
+                    _b.sent();
+                    // Delete existing file
+                    args.jobLog("Deleting existing file: ".concat(destinationPath));
+                    return [4 /*yield*/, fs_1.promises.unlink(destinationPath)];
+                case 4:
+                    _b.sent();
+                    // Rename temp file to final name
+                    args.jobLog("Renaming temp file to final name");
+                    return [4 /*yield*/, fs_1.promises.rename(tempPath, destinationPath)];
+                case 5:
+                    _b.sent();
+                    // Delete source file since we're doing a move operation
+                    args.jobLog("Deleting source file: ".concat(sourcePath));
+                    return [4 /*yield*/, fs_1.promises.unlink(sourcePath)];
+                case 6:
+                    _b.sent();
+                    return [3 /*break*/, 9];
+                case 7:
+                    // Ensure the destination directory exists
                     args.deps.fsextra.ensureDirSync((0, fileUtils_1.getFileAbosluteDir)(destinationPath));
+                    // Move the file directly
                     return [4 /*yield*/, (0, fileMoveOrCopy_1.default)({
                             operation: 'move',
                             sourcePath: sourcePath,
                             destinationPath: destinationPath,
                             args: args,
                         })];
-                case 2:
+                case 8:
+                    // Move the file directly
                     _b.sent();
-                    _b.label = 3;
-                case 3: return [2 /*return*/];
+                    _b.label = 9;
+                case 9: return [3 /*break*/, 11];
+                case 10:
+                    error_1 = _b.sent();
+                    args.jobLog("Error moving file: ".concat(error_1));
+                    return [3 /*break*/, 11];
+                case 11: return [2 /*return*/];
             }
         });
     });
 };
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, fileExtensions_1, renameToMatchOriginal_1, originalPath, originalDir_1, originalFileName_1, workingDir_1, filesInDir, i, error_1, errorMessage;
+    var lib, fileExtensions_1, renameToMatchOriginal_1, originalPath, originalDir_1, originalFileName_1, workingDir_1, allFiles, error_2, subtitleFiles, filesInDir, i, error_3, errorMessage;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -149,7 +195,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 args.inputs = lib.loadDefaultValues(args.inputs, details);
                 _a.label = 1;
             case 1:
-                _a.trys.push([1, 7, , 8]);
+                _a.trys.push([1, 10, , 11]);
                 fileExtensions_1 = String(args.inputs.fileExtensions).split(',').map(function (row) { return row.trim(); });
                 renameToMatchOriginal_1 = args.inputs.renameToMatchOriginal;
                 originalPath = args.originalLibraryFile._id;
@@ -167,62 +213,77 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 args.jobLog("Original directory: ".concat(originalDir_1));
                 workingDir_1 = (0, fileUtils_1.getFileAbosluteDir)(args.inputFileObj._id);
                 args.jobLog("Working directory: ".concat(workingDir_1));
-                return [4 /*yield*/, fs_1.promises.readdir(workingDir_1)];
+                allFiles = [];
+                _a.label = 2;
             case 2:
-                filesInDir = (_a.sent())
-                    .map(function (row) { return ({
-                    source: "".concat(workingDir_1, "/").concat(row),
-                    destination: renameToMatchOriginal_1
-                        ? (0, normJoinPath_1.default)({
-                            upath: args.deps.upath,
-                            paths: [
-                                originalDir_1,
-                                "".concat(originalFileName_1, ".").concat((0, fileUtils_1.getContainer)(row)),
-                            ],
-                        })
-                        : (0, normJoinPath_1.default)({
-                            upath: args.deps.upath,
-                            paths: [
-                                originalDir_1,
-                                row,
-                            ],
-                        }),
-                }); })
-                    .filter(function (row) { return row.source !== args.originalLibraryFile._id && row.source !== args.inputFileObj._id; })
-                    .filter(function (row) { return fileExtensions_1.includes((0, fileUtils_1.getContainer)(row.source)); });
+                _a.trys.push([2, 4, , 5]);
+                return [4 /*yield*/, fs_1.promises.readdir(workingDir_1)];
+            case 3:
+                allFiles = _a.sent();
+                args.jobLog("Found ".concat(allFiles.length, " files in working directory: ").concat(allFiles.join(', ')));
+                return [3 /*break*/, 5];
+            case 4:
+                error_2 = _a.sent();
+                args.jobLog("Error reading working directory: ".concat(error_2));
+                return [2 /*return*/, {
+                        outputFileObj: args.inputFileObj,
+                        outputNumber: 1,
+                        variables: args.variables,
+                    }];
+            case 5:
+                subtitleFiles = allFiles.filter(function (file) {
+                    var ext = path.extname(file).toLowerCase().substring(1); // Remove the dot
+                    return fileExtensions_1.includes(ext);
+                });
+                args.jobLog("Found ".concat(subtitleFiles.length, " subtitle files: ").concat(subtitleFiles.join(', ')));
+                filesInDir = subtitleFiles.map(function (file) {
+                    var sourcePath = path.join(workingDir_1, file);
+                    var destFileName = file;
+                    // Rename if needed
+                    if (renameToMatchOriginal_1) {
+                        var ext = path.extname(file);
+                        destFileName = "".concat(originalFileName_1).concat(ext);
+                    }
+                    var destinationPath = path.join(originalDir_1, destFileName);
+                    return {
+                        source: sourcePath,
+                        destination: destinationPath,
+                    };
+                })
+                    .filter(function (row) { return row.source !== args.originalLibraryFile._id && row.source !== args.inputFileObj._id; });
                 args.jobLog("Found ".concat(filesInDir.length, " subtitle files to move"));
                 i = 0;
-                _a.label = 3;
-            case 3:
-                if (!(i < filesInDir.length)) return [3 /*break*/, 6];
+                _a.label = 6;
+            case 6:
+                if (!(i < filesInDir.length)) return [3 /*break*/, 9];
                 // eslint-disable-next-line no-await-in-loop
                 return [4 /*yield*/, doOperation({
                         args: args,
                         sourcePath: filesInDir[i].source,
                         destinationPath: filesInDir[i].destination,
                     })];
-            case 4:
+            case 7:
                 // eslint-disable-next-line no-await-in-loop
                 _a.sent();
-                _a.label = 5;
-            case 5:
+                _a.label = 8;
+            case 8:
                 i += 1;
-                return [3 /*break*/, 3];
-            case 6: return [2 /*return*/, {
+                return [3 /*break*/, 6];
+            case 9: return [2 /*return*/, {
                     outputFileObj: args.inputFileObj,
                     outputNumber: 1,
                     variables: args.variables,
                 }];
-            case 7:
-                error_1 = _a.sent();
-                errorMessage = error_1 instanceof Error ? error_1.message : 'Unknown error';
+            case 10:
+                error_3 = _a.sent();
+                errorMessage = error_3 instanceof Error ? error_3.message : 'Unknown error';
                 args.jobLog("Error moving subtitle files: ".concat(errorMessage));
                 return [2 /*return*/, {
                         outputFileObj: args.inputFileObj,
                         outputNumber: 1,
                         variables: args.variables,
                     }];
-            case 8: return [2 /*return*/];
+            case 11: return [2 /*return*/];
         }
     });
 }); };
