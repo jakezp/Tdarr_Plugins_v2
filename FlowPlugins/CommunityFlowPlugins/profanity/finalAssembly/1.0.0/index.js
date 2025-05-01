@@ -148,7 +148,7 @@ var details = function () { return ({
 exports.details = details;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
-    var lib, outputFilePath, outputContainer, copyVideoStream, includeOriginalAudio, originalVideoPath, workDir, possibleVideoPath, processedAudioPath, originalDir, originalName, finalExt, scriptDir, scriptPath, ffmpegCmd, ffmpegArgs, cli, res, error_1, errorMessage;
+    var lib, outputFilePath, outputContainer, copyVideoStream, includeOriginalAudio, originalVideoPath, workDir, possibleVideoPath, processedAudioPath, workingDir, originalName, finalExt, scriptDir, scriptPath, ffmpegCmd, ffmpegArgs, cli, res, error_1, errorMessage;
     var _a, _b, _c, _d;
     return __generator(this, function (_e) {
         switch (_e.label) {
@@ -224,34 +224,46 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 // We don't need to get the original audio file separately since it's already in the original video container
                 // Determine the output file path and container
                 if (!outputFilePath) {
-                    originalDir = path.dirname(originalVideoPath);
+                    workingDir = path.dirname(args.inputFileObj._id);
                     originalName = path.basename(originalVideoPath, path.extname(originalVideoPath));
                     finalExt = path.extname(originalVideoPath);
                     if (outputContainer !== 'same') {
                         finalExt = ".".concat(outputContainer);
                     }
-                    outputFilePath = "".concat(originalDir, "/").concat(originalName, "_redacted").concat(finalExt);
+                    outputFilePath = "".concat(workingDir, "/").concat(originalName, "_redacted").concat(finalExt);
+                    args.jobLog("Using working directory for output: ".concat(workingDir));
                 }
                 scriptDir = path.dirname(originalVideoPath);
                 scriptPath = "".concat(scriptDir, "/ffmpeg_assembly_").concat(Date.now(), ".sh");
                 ffmpegCmd = "".concat(args.ffmpegPath, " -y");
                 // Add input files - original video and processed audio
                 ffmpegCmd += " -i \"".concat(originalVideoPath, "\" -i \"").concat(processedAudioPath, "\"");
+                // First map all streams we want to include
                 // Map video stream from original video
-                if (copyVideoStream) {
-                    ffmpegCmd += ' -map 0:v -c:v copy'; // Copy all video streams
-                }
-                else {
-                    ffmpegCmd += ' -map 0:v'; // Map all video streams but don't specify codec
-                }
-                // Map redacted audio stream and set it as default
-                ffmpegCmd += ' -map 1:a -c:a copy -disposition:a:0 default';
+                ffmpegCmd += ' -map 0:v';
+                // Map redacted audio stream (from the second input)
+                ffmpegCmd += ' -map 1:a';
                 // Map original audio streams from original video if requested
                 if (includeOriginalAudio) {
-                    ffmpegCmd += ' -map 0:a -c:a copy -disposition:a:1 none';
+                    ffmpegCmd += ' -map 0:a';
                 }
                 // Map any subtitle streams from original video (but don't embed SRT file)
-                ffmpegCmd += ' -map 0:s? -c:s copy';
+                ffmpegCmd += ' -map 0:s?';
+                // Now set codec options for each stream type
+                // Video codec
+                if (copyVideoStream) {
+                    ffmpegCmd += ' -c:v copy';
+                }
+                // Audio codec - all audio streams will be copied
+                ffmpegCmd += ' -c:a copy';
+                // Subtitle codec
+                ffmpegCmd += ' -c:s copy';
+                // Set disposition for audio streams
+                ffmpegCmd += ' -disposition:a:0 default'; // First audio stream (redacted) is default
+                if (includeOriginalAudio) {
+                    // Start from index 1 for original audio streams
+                    ffmpegCmd += ' -disposition:a:1 none';
+                }
                 // Add output file
                 ffmpegCmd += " \"".concat(outputFilePath, "\"");
                 // Write the script file

@@ -168,7 +168,8 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
 
     // Determine the output file path and container
     if (!outputFilePath) {
-      const originalDir = path.dirname(originalVideoPath);
+      // Use the working directory instead of the original directory
+      const workingDir = path.dirname(args.inputFileObj._id);
       const originalName = path.basename(originalVideoPath, path.extname(originalVideoPath));
       let finalExt = path.extname(originalVideoPath);
       
@@ -176,7 +177,8 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
         finalExt = `.${outputContainer}`;
       }
       
-      outputFilePath = `${originalDir}/${originalName}_redacted${finalExt}`;
+      outputFilePath = `${workingDir}/${originalName}_redacted${finalExt}`;
+      args.jobLog(`Using working directory for output: ${workingDir}`);
     }
 
     // Create a temporary script file with the FFmpeg command
@@ -189,23 +191,40 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     // Add input files - original video and processed audio
     ffmpegCmd += ` -i "${originalVideoPath}" -i "${processedAudioPath}"`;
     
+    // First map all streams we want to include
     // Map video stream from original video
-    if (copyVideoStream) {
-      ffmpegCmd += ' -map 0:v -c:v copy'; // Copy all video streams
-    } else {
-      ffmpegCmd += ' -map 0:v'; // Map all video streams but don't specify codec
-    }
+    ffmpegCmd += ' -map 0:v';
     
-    // Map redacted audio stream and set it as default
-    ffmpegCmd += ' -map 1:a -c:a copy -disposition:a:0 default';
+    // Map redacted audio stream (from the second input)
+    ffmpegCmd += ' -map 1:a';
     
     // Map original audio streams from original video if requested
     if (includeOriginalAudio) {
-      ffmpegCmd += ' -map 0:a -c:a copy -disposition:a:1 none';
+      ffmpegCmd += ' -map 0:a';
     }
     
     // Map any subtitle streams from original video (but don't embed SRT file)
-    ffmpegCmd += ' -map 0:s? -c:s copy';
+    ffmpegCmd += ' -map 0:s?';
+    
+    // Now set codec options for each stream type
+    // Video codec
+    if (copyVideoStream) {
+      ffmpegCmd += ' -c:v copy';
+    }
+    
+    // Audio codec - all audio streams will be copied
+    ffmpegCmd += ' -c:a copy';
+    
+    // Subtitle codec
+    ffmpegCmd += ' -c:s copy';
+    
+    // Set disposition for audio streams
+    ffmpegCmd += ' -disposition:a:0 default'; // First audio stream (redacted) is default
+    
+    if (includeOriginalAudio) {
+      // Start from index 1 for original audio streams
+      ffmpegCmd += ' -disposition:a:1 none';
+    }
     
     // Add output file
     ffmpegCmd += ` "${outputFilePath}"`;
