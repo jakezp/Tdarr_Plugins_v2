@@ -396,7 +396,7 @@ const plugin = async (args: IpluginInputArgs): Promise<IpluginOutputArgs> => {
     const isCenterChannel = args.variables?.user?.centerChannelPath === audioFilePath;
     const outputChannels = isCenterChannel ? 1 : channels;
     
-    const ffmpegCmd = `${args.ffmpegPath} -i "${audioFilePath}" -filter_complex "${filterComplex}" -c:a ${codec} -ar ${sampleRate} -b:a ${bitRate} -ac ${outputChannels} "${outputFilePath}"`;
+    const ffmpegCmd = `${args.ffmpegPath} -y -i "${audioFilePath}" -filter_complex "${filterComplex}" -c:a ${codec} -ar ${sampleRate} -b:a ${bitRate} -ac ${outputChannels} -strict -2 "${outputFilePath}"`;
     
     // Write the script file
     fs.writeFileSync(scriptPath, ffmpegCmd);

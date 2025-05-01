@@ -391,7 +391,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 scriptPath = "".concat(scriptDir, "/ffmpeg_redact_").concat(Date.now(), ".sh");
                 isCenterChannel = ((_k = (_j = args.variables) === null || _j === void 0 ? void 0 : _j.user) === null || _k === void 0 ? void 0 : _k.centerChannelPath) === audioFilePath;
                 outputChannels = isCenterChannel ? 1 : channels;
-                ffmpegCmd = "".concat(args.ffmpegPath, " -i \"").concat(audioFilePath, "\" -filter_complex \"").concat(filterComplex, "\" -c:a ").concat(codec, " -ar ").concat(sampleRate, " -b:a ").concat(bitRate, " -ac ").concat(outputChannels, " \"").concat(outputFilePath, "\"");
+                ffmpegCmd = "".concat(args.ffmpegPath, " -y -i \"").concat(audioFilePath, "\" -filter_complex \"").concat(filterComplex, "\" -c:a ").concat(codec, " -ar ").concat(sampleRate, " -b:a ").concat(bitRate, " -ac ").concat(outputChannels, " -strict -2 \"").concat(outputFilePath, "\"");
                 // Write the script file
                 fs.writeFileSync(scriptPath, ffmpegCmd);
                 fs.chmodSync(scriptPath, '755'); // Make it executable
